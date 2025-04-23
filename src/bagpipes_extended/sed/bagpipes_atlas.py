@@ -26,7 +26,7 @@ from bagpipes.models import model_galaxy
 from numpy.typing import ArrayLike
 from tqdm import tqdm
 
-from glass_niriss.c_utils import calc_chisq
+from bagpipes_extended.c_utils import calc_chisq
 
 __all__ = ["AtlasGenerator", "AtlasFitter"]
 

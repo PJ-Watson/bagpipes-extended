@@ -1,5 +1,5 @@
 Reference/API
 *************
 
-.. automodapi:: glass_niriss.sed
+.. automodapi:: bagpipes_extended.sed
    :inherited-members:

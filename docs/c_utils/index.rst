@@ -1,4 +1,4 @@
-.. _glass-niriss-c_utils:
+.. _bagpipes-extended-c_utils:
 
 *****************
 Utility Functions

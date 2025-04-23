@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0","numpy>=2", "setuptools_scm>=8.0","Cython>=3.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "GLASS-NIRISS"
+name = "bagpipes-extended"
 dynamic = ["version"]
 authors = [
-  { name="Peter J. Watson", email="peter.watson+GN@inaf.it" },
+  { name="Peter J. Watson", email="peter.watson+BE@inaf.it" },
 ]
-description = "A complete pipeline for processing JWST-NIRISS data."
+description = "Extensions to bagpipes (Carnall+18)."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -25,7 +25,8 @@ dependencies = [
     "matplotlib>=3.9",
     # "tqdm>=4.66",
     "scipy>=1.13",
-    "Cython>=3"
+    "Cython>=3",
+    "bagpipes>=1.2.0"
 ]
 
 [project.optional-dependencies]
@@ -36,15 +37,6 @@ docs = [
     "sphinx-copybutton>=0.5",
     "sphinx>=8.0",
     "numpydoc>=1.8",
-]
-grizli = [
-    "grizli[jwst]"
-]
-isophotal = [
-    "bottleneck>=1.4",
-    "photutils>=1.13",
-    "reproject>=0.14",
-    "shapely>=2.0.4"
 ]
 
 [project.urls]

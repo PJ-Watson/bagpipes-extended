@@ -11,14 +11,14 @@ Configuration file for the Sphinx documentation builder.
 
 from sphinx_astropy.conf.v2 import *
 
-project = "GLASS-NIRISS"
-copyright = "2024, Peter J. Watson"
+project = "bagpipes-extended"
+copyright = "2025, Peter J. Watson"
 author = "Peter J. Watson"
 
 import sys
 from importlib.metadata import version as get_version
 
-release: str = get_version("glass-niriss")
+release: str = get_version("bagpipes-extended")
 # for example take major/minor
 version: str = ".".join(release.split(".")[:2])
 
@@ -77,7 +77,6 @@ version_link = f"{sys.version_info.major}.{sys.version_info.minor}"
 #     "matplotlib": ("https://matplotlib.org/stable", None),
 #     "astropy": ("https://docs.astropy.org/en/stable", None),
 intersphinx_mapping |= {
-    "grizli": ("https://grizli.readthedocs.io/en/latest", None),
     "bagpipes": ("https://bagpipes.readthedocs.io/en/latest", None),
     "pypher": ("https://pypher.readthedocs.io/en/latest/", None),
     "stwcs": ("https://stwcs.readthedocs.io/en/latest/", None),

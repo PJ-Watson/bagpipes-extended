@@ -1,4 +1,4 @@
-.. _glass-niriss-sed:
+.. _bagpipes-extended-sed:
 
 ***********
 SED Fitting

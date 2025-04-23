@@ -1,5 +1,5 @@
 Reference/API
 *************
 
-.. automodapi:: glass_niriss.c_utils
+.. automodapi:: bagpipes_extended.c_utils
    :inherited-members:
