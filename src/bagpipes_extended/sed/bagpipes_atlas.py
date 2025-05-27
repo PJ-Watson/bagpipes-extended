@@ -11,6 +11,7 @@ import contextlib
 import os
 from copy import deepcopy
 from functools import partial
+from itertools import repeat
 from multiprocessing import Manager, Pool, cpu_count, shared_memory
 from multiprocessing.managers import SharedMemoryManager
 from os import PathLike
@@ -400,6 +401,7 @@ class AtlasGenerator:
                 position=pgb_pos + 1,
                 desc=f"Worker {worker_id}",
                 leave=False,
+                mininterval=10,
             ):
                 # print(c)
                 param_vector = self.prior.transform(init_arr[idx_i])
@@ -505,7 +507,8 @@ class AtlasGenerator:
                 self.n_proc = parallel
 
             print(
-                f"Generating {n_samples} samples using {self.n_proc} process(es), "
+                f"Generating {n_samples} samples using {self.n_proc} process"
+                f"{"es" if self.n_proc>1 else ""}, "
                 f"with {self.ndim} free parameters."
             )
 
@@ -594,6 +597,151 @@ class AtlasGenerator:
 # def _test_shared_memory(indices, shared_init, shared_output):
 #     # return
 #     print(shared_init[indices].shape)
+
+
+# @staticmethod
+def fit_single(
+    # self,
+    galaxy: bagpipes.galaxy,
+    z_range: ArrayLike | None = None,
+    atlas_name: str | None = None,
+    atlas_shape: tuple | None = None,
+    param_samples_name: str | None = None,
+    param_samples_shape: tuple | None = None,
+    n_posterior: int = 500,
+    rng: np.random.default_rng | None = None,
+    params: list | None = None,
+) -> dict:
+    """
+    Fit a single `bagpipes.galaxy` object.
+
+    Parameters
+    ----------
+    galaxy : `bagpipes.galaxy`
+        A galaxy object containing the photometric data to be fitted.
+        Note that fitting spectroscopic data is currently not
+        supported.
+    z_range : ArrayLike | None
+        The redshift range of the galaxy to be fitted. By default
+        ``None``, meaning the entire atlas will be used.
+    atlas_name : str | None
+        The name of the model atlas in shared memory.
+    atlas_shape : tuple | None
+        The shape of the model atlas in shared memory.
+    param_samples_name : str | None
+        The name of the parameter samples array in shared memory.
+    param_samples_shape : tuple | None
+        The shape of the parameter samples array in shared memory.
+    n_posterior : int, optional
+        How many equally weighted samples should be generated from the
+        posterior once fitting is complete. Default is 500.
+    rng : np.random.default_rng, optional
+        The RNG generator.
+    params : list, optional
+        A list of the parameter names used in the fit.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the results of the fit.
+    """
+
+    if galaxy.photometry_exists:
+        log_error_factors = np.log(2 * np.pi * galaxy.photometry[:, 2] ** 2)
+        K_phot = -0.5 * np.sum(log_error_factors)
+        inv_sigma_sq_phot = 1.0 / galaxy.photometry[:, 2] ** 2
+
+    if galaxy.index_list is not None:
+        log_error_factors = np.log(2 * np.pi * galaxy.indices[:, 1] ** 2)
+        K_ind = -0.5 * np.sum(log_error_factors)
+        inv_sigma_sq_ind = 1.0 / galaxy.indices[:, 1] ** 2
+
+    shm_model_atlas = shared_memory.SharedMemory(name=atlas_name)
+    shared_model_atlas = np.ndarray(
+        atlas_shape, dtype=float, buffer=shm_model_atlas.buf
+    )
+
+    shm_param_samples = shared_memory.SharedMemory(name=param_samples_name)
+    shared_param_samples = np.ndarray(
+        param_samples_shape, dtype=float, buffer=shm_param_samples.buf
+    )
+
+    # diff = (self.model_atlas - galaxy.photometry[:, 1]) ** 2
+
+    # chisq_arr = np.nansum(
+    #     (self.model_atlas - galaxy.photometry[:, 1]) ** 2 * inv_sigma_sq_phot,
+    #     axis=-1,
+    # )  # /(diff.shape[1]-len(self.params))
+    if z_range is None:
+        chisq_arr = calc_chisq(
+            shared_model_atlas,
+            np.ascontiguousarray(galaxy.photometry[:, 1]),
+            inv_sigma_sq_phot,
+        )
+        param2d = shared_param_samples  # [self.param_samples[k] for k in self.params]
+    else:
+        # z_idxs = slice(np.argmin(),np.argmax(self.param_samples["redshift"]<=ID))
+        # print (params)
+        # print (np.asarray(params)=="redshift", shared_param_samples.shape)
+        # print (shared_param_samples[np.asarray(params)=="redshift"])
+        z_idxs = np.searchsorted(
+            shared_param_samples[np.asarray(params) == "redshift"].ravel(), z_range
+        )
+        if z_idxs[0] == shared_param_samples.shape[1] or z_idxs[1] == 0:
+            raise ValueError("Redshift range not covered by model atlas.")
+        chisq_arr = calc_chisq(
+            shared_model_atlas[z_idxs[0] : z_idxs[1]],
+            np.ascontiguousarray(galaxy.photometry[:, 1]),
+            inv_sigma_sq_phot,
+        )
+        # param2d = [
+        #     self.param_samples[k][z_idxs[0] : z_idxs[-1]] for k in self.params
+        # ]
+        param2d = shared_param_samples[:, z_idxs[0] : z_idxs[-1]]
+    map_idx = np.argmin(chisq_arr)
+    lnlike_oned = K_phot - 0.5 * chisq_arr
+
+    # param2d.append(lnlike_oned)
+    # print ("1", param2d.shape)
+    param2d = np.concatenate([param2d, np.atleast_2d(lnlike_oned)]).T
+    # param2d = np.column_stack([param2d, lnlike_oned])
+    # print ("2", param2d.shape)
+
+    # chisq_arr /= self.ndim
+
+    weights = np.exp(-0.5 * chisq_arr) / np.nansum(np.exp(-0.5 * chisq_arr))
+    finite_weights = np.isfinite(weights)
+
+    # import matplotlib.pyplot as plt
+    # print (self.params)
+    # # plt.scatter(self.param_samples["continuity:massformed"], chisq_arr/self.ndim)
+    # # plt.ylim((0,1e3))
+    # plt.scatter(self.param_samples["continuity:massformed"], weights)
+    # plt.show()
+    # exit()
+
+    if np.nansum(finite_weights) == 0:
+        samples2d = np.zeros((n_posterior, param2d.shape[1]))
+    else:
+        samples2d = rng.choice(
+            param2d[finite_weights],
+            n_posterior,
+            p=weights[finite_weights],
+        )
+
+    results = {}
+
+    results["samples2d"] = samples2d[:, :-1]
+    # if self.add_errs is not None:
+    #     results["samples2d"] += self.add_errs
+    results["lnlike"] = samples2d[:, -1]
+    results["lnz"] = lnlike_oned[map_idx]
+    results["lnz_err"] = np.nan
+
+    results["median"] = np.median(samples2d, axis=0)
+    results["conf_int"] = np.percentile(results["samples2d"], (16, 84), axis=0)
+
+    return results
 
 
 class AtlasFitter:
@@ -752,126 +900,77 @@ class AtlasFitter:
             #             f"{getattr(self.galaxy, k)}, {v}"
             #         )
 
-            self.model_atlas = np.array(file["model_atlas"])
-            physical_idx = (self.model_atlas[:, -1] != 1.0) & (
-                np.isfinite(np.sum(self.model_atlas, axis=-1))
+            self.smm = SharedMemoryManager()
+            self.smm.start()
+            # cubes = rng.random((n_samples, self.ndim))
+            # # print (cubes.shape)
+            model_atlas = np.array(file["model_atlas"])
+            physical_idx = (model_atlas[:, -1] != 1.0) & (
+                np.isfinite(np.sum(model_atlas, axis=-1))
             )
+            model_atlas = model_atlas[physical_idx][:, :-1]
 
-            self.model_atlas = self.model_atlas[physical_idx][:, :-1]
-            self.param_samples = {}
-            for k in self.params:
-                self.param_samples[k] = np.array(file[k][physical_idx])
+            # shared_model_atlas = shared_model_atlas[physical_idx][:, :-1]
+            param_samples = np.empty((len(self.params), model_atlas.shape[0]))
+            for i, k in enumerate(self.params):
+                param_samples[i] = np.array(file[k][physical_idx])
 
             if "redshift" in self.params:
-                z_idx = np.argsort(self.param_samples["redshift"])
-                self.model_atlas = self.model_atlas[z_idx]
-                for k in self.params:
-                    # print (k, self.param_samples[k], self.param_samples[k].dtype, self.para)
-                    self.param_samples[k] = self.param_samples[k][z_idx]
+                z_idx = np.argsort(np.array(file["redshift"][physical_idx]))
+                model_atlas = model_atlas[z_idx]
+                # for i, k in enumerate(self.params):
+                #     # print (k, self.param_samples[k], self.param_samples[k].dtype, self.para)
+                #     self.param_samples[i] = self.param_samples[i][z_idx]
+                param_samples = param_samples[:, z_idx]
 
-            self.n_samples = self.model_atlas.shape[0]
+            shm_model_atlas = self.smm.SharedMemory(size=model_atlas.nbytes)
+            self.atlas_shape = model_atlas.shape
+            self.atlas_name = shm_model_atlas.name
+            shared_model_atlas = np.ndarray(
+                model_atlas.shape, dtype=model_atlas.dtype, buffer=shm_model_atlas.buf
+            )
+            shared_model_atlas[:] = model_atlas[:]
 
-    def fit_single(
-        self, galaxy: bagpipes.galaxy, z_range: ArrayLike | None = None
+            shm_param_samples = self.smm.SharedMemory(size=param_samples.nbytes)
+            self.param_samples_shape = param_samples.shape
+            self.param_samples_name = shm_param_samples.name
+            shared_param_samples = np.ndarray(
+                param_samples.shape,
+                dtype=param_samples.dtype,
+                buffer=shm_param_samples.buf,
+            )
+            shared_param_samples[:] = param_samples[:]
+            # model_atlas = np.array(file["model_atlas"]).nbytes
+
+            self.n_samples = shared_model_atlas.shape[0]
+
+    @staticmethod
+    def _fit_object(
+        # self,
+        ID: str,
+        filt_list: ArrayLike = None,
+        z=None,
+        load_data=None,
+        spectrum_exists=None,
+        photometry_exists=None,
+        load_indices=None,
+        index_list=None,
+        posterior_parent_path=None,
+        redshift_range=None,
+        fit_instructions=None,
+        out_path=None,
+        run=None,
+        n_posterior=None,
+        full_catalogue=None,
+        vars=None,
+        atlas_name=None,
+        atlas_shape=None,
+        param_samples_name=None,
+        param_samples_shape=None,
+        rng=None,
+        params=None,
+        **kwargs,
     ) -> dict:
-        """
-        Fit a single `bagpipes.galaxy` object.
-
-        Parameters
-        ----------
-        galaxy : `bagpipes.galaxy`
-            A galaxy object containing the photometric data to be fitted.
-            Note that fitting spectroscopic data is currently not
-            supported.
-        z_range : ArrayLike | None
-            The redshift range of the galaxy to be fitted. By default
-            ``None``, meaning the entire atlas will be used.
-
-        Returns
-        -------
-        dict
-            A dictionary containing the results of the fit.
-        """
-
-        if galaxy.photometry_exists:
-            log_error_factors = np.log(2 * np.pi * galaxy.photometry[:, 2] ** 2)
-            K_phot = -0.5 * np.sum(log_error_factors)
-            inv_sigma_sq_phot = 1.0 / galaxy.photometry[:, 2] ** 2
-
-        if galaxy.index_list is not None:
-            log_error_factors = np.log(2 * np.pi * galaxy.indices[:, 1] ** 2)
-            K_ind = -0.5 * np.sum(log_error_factors)
-            inv_sigma_sq_ind = 1.0 / galaxy.indices[:, 1] ** 2
-
-        # diff = (self.model_atlas - galaxy.photometry[:, 1]) ** 2
-
-        # chisq_arr = np.nansum(
-        #     (self.model_atlas - galaxy.photometry[:, 1]) ** 2 * inv_sigma_sq_phot,
-        #     axis=-1,
-        # )  # /(diff.shape[1]-len(self.params))
-        if z_range is None:
-            chisq_arr = calc_chisq(
-                self.model_atlas,
-                np.ascontiguousarray(galaxy.photometry[:, 1]),
-                inv_sigma_sq_phot,
-            )
-            param2d = [self.param_samples[k] for k in self.params]
-        else:
-            # z_idxs = slice(np.argmin(),np.argmax(self.param_samples["redshift"]<=ID))
-            z_idxs = np.searchsorted(self.param_samples["redshift"], z_range)
-            if z_idxs[0] == self.n_samples or z_idxs[1] == 0:
-                raise ValueError("Redshift range not covered by model atlas.")
-            chisq_arr = calc_chisq(
-                self.model_atlas[z_idxs[0] : z_idxs[1]],
-                np.ascontiguousarray(galaxy.photometry[:, 1]),
-                inv_sigma_sq_phot,
-            )
-            param2d = [
-                self.param_samples[k][z_idxs[0] : z_idxs[-1]] for k in self.params
-            ]
-        map_idx = np.argmin(chisq_arr)
-        lnlike_oned = K_phot - 0.5 * chisq_arr
-
-        param2d.append(lnlike_oned)
-        param2d = np.column_stack(param2d)
-
-        # chisq_arr /= self.ndim
-
-        weights = np.exp(-0.5 * chisq_arr) / np.nansum(np.exp(-0.5 * chisq_arr))
-        finite_weights = np.isfinite(weights)
-
-        # import matplotlib.pyplot as plt
-        # print (self.params)
-        # # plt.scatter(self.param_samples["continuity:massformed"], chisq_arr/self.ndim)
-        # # plt.ylim((0,1e3))
-        # plt.scatter(self.param_samples["continuity:massformed"], weights)
-        # plt.show()
-        # exit()
-
-        if np.nansum(finite_weights) == 0:
-            samples2d = np.zeros((self.n_posterior, param2d.shape[1]))
-        else:
-            samples2d = self.rng.choice(
-                param2d[finite_weights],
-                self.n_posterior,
-                p=weights[finite_weights],
-            )
-
-        results = {}
-
-        results["samples2d"] = samples2d[:, :-1]
-        if self.add_errs is not None:
-            results["samples2d"] += self.add_errs
-        results["lnlike"] = samples2d[:, -1]
-        results["lnz"] = lnlike_oned[map_idx]
-        results["lnz_err"] = np.nan
-
-        results["median"] = np.median(samples2d, axis=0)
-        results["conf_int"] = np.percentile(results["samples2d"], (16, 84), axis=0)
-
-        return results
-
-    def _fit_object(self, ID: str) -> dict:
         """
         Fit a single object from the catalogue.
 
@@ -889,40 +988,54 @@ class AtlasFitter:
             The row data for the results table.
         """
 
-        # Get the correct filt_list for this object
-        filt_list = self.cat_filt_list
-        if self.vary_filt_list:
-            filt_list = self.cat_filt_list[np.argmax(self.IDs == ID)]
+        # # Get the correct filt_list for this object
+        # filt_list = self.cat_filt_list
+        # if self.vary_filt_list:
+        #     filt_list = self.cat_filt_list[np.argmax(self.IDs == ID)]
 
         galaxy = bagpipes.galaxy(
             ID,
-            self.load_data,
+            load_data,
             filt_list=filt_list,
-            spectrum_exists=self.spectrum_exists,
-            photometry_exists=self.photometry_exists,
-            load_indices=self.load_indices,
-            index_list=self.index_list,
+            spectrum_exists=spectrum_exists,
+            photometry_exists=photometry_exists,
+            load_indices=load_indices,
+            index_list=index_list,
         )
 
-        posterior_path = self.out_path / "pipes" / "posterior" / self.run / f"{ID}.h5"
+        # print("RNG", rng)
+        # print(dir(rng))
+        # posterior_path = self.out_path / "pipes" / "posterior" / self.run / f"{ID}.h5"
+        posterior_path = posterior_parent_path / f"{ID}.h5"
 
         if not posterior_path.is_file():
 
-            if self.redshifts is not None:
-                ind = np.argmax(self.IDs == ID)
-                # print (f"{ind=}", f"{ID=}", self.IDs)
-                z = self.redshifts[ind]
-                z_range = [z - self.redshift_range / 2, z + self.redshift_range / 2]
+            # if self.redshifts is not None:
+            #     ind = np.argmax(self.IDs == ID)
+            #     # print (f"{ind=}", f"{ID=}", self.IDs)
+            #     z = self.redshifts[ind]
+            if z is not None:
+                z_range = [z - redshift_range / 2, z + redshift_range / 2]
             else:
                 z_range = None
 
-            results = self.fit_single(galaxy, z_range)
+            results = fit_single(
+                galaxy,
+                z_range,
+                atlas_name,
+                atlas_shape,
+                param_samples_name,
+                param_samples_shape,
+                n_posterior=n_posterior,
+                rng=rng,
+                params=params,
+            )
 
             with h5py.File(posterior_path, "w") as file:
 
                 # This is necessary for converting large arrays to strings
                 np.set_printoptions(threshold=10**7)
-                file.attrs["fit_instructions"] = str(self.fit_instructions)
+                file.attrs["fit_instructions"] = str(fit_instructions)
                 np.set_printoptions(threshold=10**4)
 
                 for k in results.keys():
@@ -938,10 +1051,10 @@ class AtlasFitter:
                 results["lnz_err"] = file["lnz_err"][()]
                 # print (results)
 
-        with temp_chdir(self.out_path):
+        with temp_chdir(out_path):
             # Create a posterior object to hold the results of the fit.
             posterior_obj = bagpipes.fitting.posterior(
-                galaxy, run=self.run, n_samples=self.n_posterior
+                galaxy, run=run, n_samples=n_posterior
             )
 
             samples = posterior_obj.samples
@@ -949,7 +1062,7 @@ class AtlasFitter:
             row_data = {}
             row_data["#ID"] = ID
 
-            for v in self.vars:
+            for v in vars:
                 if v == "UV_colour":
                     values = samples["uvj"][:, 0] - samples["uvj"][:, 1]
 
@@ -963,7 +1076,7 @@ class AtlasFitter:
                 row_data[f"{v}_50"] = np.percentile(values, 50)
                 row_data[f"{v}_84"] = np.percentile(values, 84)
 
-            if self.redshifts is not None:
+            if z is not None:
                 row_data["input_redshift"] = z
             else:
                 row_data["input_redshift"] = np.nan
@@ -971,7 +1084,7 @@ class AtlasFitter:
             row_data["log_evidence"] = results["lnz"]
             row_data["log_evidence_err"] = results["lnz_err"]
 
-            if self.full_catalogue and self.photometry_exists:
+            if full_catalogue and photometry_exists:
                 row_data["chisq_phot"] = np.min(samples["chisq_phot"])
                 n_bands = np.sum(galaxy.photometry[:, 1] != 0.0)
                 row_data["n_bands"] = n_bands
@@ -1157,8 +1270,12 @@ class AtlasFitter:
         self.spectrum_exists = spectrum_exists
         self.photometry_exists = photometry_exists
         # self.make_plots = make_plots
-        self.cat_filt_list = cat_filt_list
-        self.vary_filt_list = vary_filt_list
+        # self.cat_filt_list = cat_filt_list
+        if vary_filt_list:
+            assert len(cat_filt_list) == len(
+                self.IDs
+            ), "A variable filter list must have the same number of elements as the list of IDs."
+        # self.vary_filt_list = vary_filt_list
         self.redshifts = redshifts
         self.redshift_range = redshift_range
         self.run = run
@@ -1201,10 +1318,40 @@ class AtlasFitter:
             else:
                 n_proc = parallel
 
-            print(f"Fitting {self.n_objects} objects using {n_proc} process(es).")
+            print(
+                f"Fitting {self.n_objects} objects using {n_proc} process{"es" if n_proc>1 else ""}."
+            )
 
+            inputs = zip(
+                self.IDs,
+                cat_filt_list if vary_filt_list else repeat(cat_filt_list),
+                (self.redshifts if self.redshifts is not None else repeat(None)),
+            )
+            mapped_fn = partial(
+                self._fit_object,
+                load_data=self.load_data,
+                spectrum_exists=self.spectrum_exists,
+                photometry_exists=self.photometry_exists,
+                load_indices=self.load_indices,
+                posterior_parent_path=self.out_path / "pipes" / "posterior" / self.run,
+                redshift_range=self.redshift_range,
+                fit_instructions=self.fit_instructions,
+                out_path=self.out_path,
+                run=self.run,
+                n_posterior=self.n_posterior,
+                vars=self.vars,
+                full_catalogue=self.full_catalogue,
+                atlas_name=self.atlas_name,
+                atlas_shape=self.atlas_shape,
+                param_samples_name=self.param_samples_name,
+                param_samples_shape=self.param_samples_shape,
+                rng=self.rng,
+                params=self.params,
+            )
             with Pool(processes=n_proc) as pool:
-                fit_data = pool.map_async(self._fit_object, tqdm(IDs))
+                fit_data = pool.starmap_async(
+                    mapped_fn, tqdm(inputs, total=len(self.IDs))
+                )
                 fit_data.wait()
             self.cat = Table(
                 names=col_names,

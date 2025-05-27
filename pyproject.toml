@@ -40,8 +40,8 @@ docs = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/PJ-Watson/GLASS-NIRISS"
-"Bug Tracker" = "https://github.com/PJ-Watson/GLASS-NIRISS/issues"
+"Homepage" = "https://github.com/PJ-Watson/bagpipes-extended"
+"Bug Tracker" = "https://github.com/PJ-Watson/bagpipes-extended/issues"
 
 [tool.setuptools.package-data]
 "*" = ["*.*"]
@@ -75,4 +75,4 @@ override_SS05 = [  # override SS05 to allow docstrings starting with these words
 ]
 
 [tool.setuptools_scm]
-version_file = "src/glass_niriss/_version.py"
+version_file = "src/bagpipes_extended/_version.py"
