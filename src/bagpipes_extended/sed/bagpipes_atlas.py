@@ -24,6 +24,7 @@ import numpy as np
 from astropy.table import Table
 from bagpipes.fitting.prior import dirichlet, prior
 from bagpipes.models import model_galaxy
+from numpy.random import Generator
 from numpy.typing import ArrayLike
 from tqdm import tqdm
 
@@ -401,7 +402,7 @@ class AtlasGenerator:
                 position=pgb_pos + 1,
                 desc=f"Worker {worker_id}",
                 leave=False,
-                mininterval=10,
+                mininterval=1,
             ):
                 # print(c)
                 param_vector = self.prior.transform(init_arr[idx_i])
@@ -609,7 +610,7 @@ def fit_single(
     param_samples_name: str | None = None,
     param_samples_shape: tuple | None = None,
     n_posterior: int = 500,
-    rng: np.random.default_rng | None = None,
+    rng: Generator | None = None,
     params: list | None = None,
 ) -> dict:
     """

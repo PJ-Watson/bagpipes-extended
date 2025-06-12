@@ -26,8 +26,9 @@ except ImportError:
 
 from bagpipes import utils
 from bagpipes.catalogue import fit_catalogue as bagpipes_fit_catalogue
-from bagpipes.fitting.fit import fit
 from bagpipes.input.galaxy import galaxy
+
+from bagpipes_extended.sed.galaxies import FitObj, ObsGalaxy
 
 
 class fit_catalogue(bagpipes_fit_catalogue):
@@ -125,6 +126,16 @@ class fit_catalogue(bagpipes_fit_catalogue):
         Units of the input photometry, defaults to microjanskys, `“mujy”`.
         The photometry will be converted to ergscma by default within the
         class.
+
+    lines_list : list, optional
+        A list of emission line names, matching those in Cloudy.This can
+        only be used if `spectrum_exists=True` or
+        `photometry_exists=True`. If `True`, the last component of
+        `load_data` should be a set of line fluxes. By default `False`.
+    lines_units : str, optional
+        By default, this is `CGS`, i.e. ergs s^-1 cm^-2. If provided as
+        SI units (`"SI"`, W m^-2), line fluxes will be converted
+        internally to CGS units.
     """
 
     def __init__(
@@ -140,7 +151,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         redshifts: ArrayLike | None = None,
         redshift_sigma: float = 0.0,
         run: str = ".",
-        analysis_function: Callable[[fit], None] | None = None,
+        analysis_function: Callable[[FitObj], None] | None = None,
         time_calls: bool = False,
         n_posterior: int = 500,
         full_catalogue: bool = False,
@@ -149,6 +160,8 @@ class fit_catalogue(bagpipes_fit_catalogue):
         track_backlog: bool = False,
         spec_units: str = "ergscma",
         phot_units: str = "mujy",
+        lines_list: list | None = None,
+        lines_units: str = "CGS",
     ):
 
         self.IDs = np.array(IDs).astype(str)
@@ -170,6 +183,8 @@ class fit_catalogue(bagpipes_fit_catalogue):
         self.index_list = index_list
         self.spec_units = spec_units
         self.phot_units = phot_units
+        self.lines_list = lines_list
+        self.lines_units = lines_units
 
         self.n_objects = len(self.IDs)
         self.done = np.zeros(self.IDs.shape[0]).astype(bool)
@@ -385,7 +400,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
             filt_list = self.cat_filt_list[np.argmax(self.IDs == ID)]
 
         # Load up the observational data for this object
-        self.galaxy = galaxy(
+        self.galaxy = ObsGalaxy(
             ID,
             self.load_data,
             filt_list=filt_list,
@@ -395,10 +410,12 @@ class fit_catalogue(bagpipes_fit_catalogue):
             index_list=self.index_list,
             spec_units=self.spec_units,
             phot_units=self.phot_units,
+            lines_list=self.lines_list,
+            lines_units=self.lines_units,
         )
 
         # Fit the object
-        self.obj_fit = fit(
+        self.obj_fit = FitObj(
             self.galaxy,
             self.fit_instructions,
             run=self.run,
