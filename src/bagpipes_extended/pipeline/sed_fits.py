@@ -129,10 +129,15 @@ def generate_fit_params(
     """
 
     fit_params = {}
-    if (z_range == 0.0) or (type(obj_z) is ArrayLike):
+    if z_range == 0.0:
         fit_params["redshift"] = obj_z
+    elif hasattr(obj_z, "__len__"):
+        fit_params["redshift"] = tuple(obj_z[:2])
     else:
-        fit_params["redshift"] = (obj_z - z_range / 2, obj_z + z_range / 2)
+        fit_params["redshift"] = (
+            round(obj_z - z_range / 2, 3),
+            round(obj_z + z_range / 2, 3),
+        )
 
     from astropy.cosmology import FlatLambdaCDM
 
@@ -149,7 +154,7 @@ def generate_fit_params(
             age_bins = np.insert(age_bins, 0, 0.0)
 
             continuity = {
-                "massformed": (3.0, 11.0),
+                "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
@@ -170,7 +175,7 @@ def generate_fit_params(
         case "continuity_varied_z":
 
             continuity = {
-                "massformed": (3.0, 12.0),
+                "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
@@ -190,7 +195,7 @@ def generate_fit_params(
 
         case "dblplaw":
             fit_params["dblplaw"] = {
-                "massformed": (3.0, 11.0),
+                "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,

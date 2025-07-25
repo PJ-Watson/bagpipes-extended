@@ -881,26 +881,29 @@ class AtlasFitter:
             fit_info_str = file.attrs["fit_instructions"]
             fit_info_str = fit_info_str.replace("array", "np.array")
             fit_info_str = fit_info_str.replace("float", "np.float")
-            print(fit_info_str)
             if eval(fit_info_str) != self.fit_instructions:
-                print(eval(fit_info_str), self.fit_instructions)
-                raise ValueError("Fit instructions do not match.")
+                err_text = ""
+                for k, v in eval(fit_info_str).items():
+                    if type(v) is dict:
+                        for kk, vv in v.items():
+                            if not vv == self.fit_instructions[k][kk]:
+                                err_text += f"KEY: {kk}\t ATLAS: {vv}\t "
+                                err_text += (
+                                    f"FIT_INSTR: {self.fit_instructions[k][kk]}\n"
+                                )
+
+                    else:
+                        if not v == self.fit_instructions[k]:
+                            err_text += f"KEY: {k}\t ATLAS: {v}\t "
+                            err_text += f"FIT_INSTR: {self.fit_instructions[k]}\n"
+
+                raise ValueError(f"Fit instructions do not match:\n{err_text}")
 
             model_kwargs_str = file.attrs["model_kwargs"]
             model_kwargs_str = model_kwargs_str.replace("array", "np.array")
             model_kwargs_str = model_kwargs_str.replace("float", "np.float")
 
             self.model_kwargs = eval(model_kwargs_str)
-            # for k, v in self.model_kwargs.items():
-            #     # assert (
-            #     #     getattr(self.galaxy, k) == v
-            #     # ), "Fit parameters must match generated atlas."
-            #     if getattr(self.galaxy, k) != v:
-            #         print(
-            #             f"Fit parameters do not match generated atlas, for {k}:"
-            #             f"{getattr(self.galaxy, k)}, {v}"
-            #         )
-
             self.smm = SharedMemoryManager()
             self.smm.start()
             # cubes = rng.random((n_samples, self.ndim))
@@ -1326,7 +1329,11 @@ class AtlasFitter:
             inputs = zip(
                 self.IDs,
                 cat_filt_list if vary_filt_list else repeat(cat_filt_list),
-                (self.redshifts if self.redshifts is not None else repeat(None)),
+                (
+                    self.redshifts
+                    if hasattr(self.redshifts, "__iter__")
+                    else repeat(self.redshifts if self.redshifts is not None else None)
+                ),
             )
             mapped_fn = partial(
                 self._fit_object,
