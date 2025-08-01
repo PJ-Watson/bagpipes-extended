@@ -15,7 +15,7 @@ ext_kwargs = {
         ("_USE_MATH_DEFINES", "1"),
         ("NPY_NO_DEPRECATED_API", "NPY_2_0_API_VERSION"),
     ],
-    "extra_compile_args": ["-O3", "-fopenmp"],
+    "extra_compile_args": ["-O3"],
 }
 extensions = [
     Extension(

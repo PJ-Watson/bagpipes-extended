@@ -23,8 +23,8 @@ dependencies = [
     "astropy>=6.1",
     "numpy>=1.26.0",
     "matplotlib>=3.9",
-    # "tqdm>=4.66",
-    "scipy>=1.13",
+    "tqdm>=4.66",
+    "scipy>=1.15",
     "Cython>=3",
     "bagpipes>=1.2.0"
 ]
