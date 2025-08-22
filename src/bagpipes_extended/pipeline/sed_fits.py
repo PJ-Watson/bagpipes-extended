@@ -18,7 +18,9 @@ def load_photom_bagpipes(
     zeropoint: float = 28.9,
     cat_hdu_index: int | str = 0,
     extra_frac_err: float = 0.1,
-) -> ArrayLike:
+    line_mapping: dict = None,
+    line_cat: Table | PathLike = None,
+) -> ArrayLike | tuple[ArrayLike, ArrayLike]:
     """
     Load photometry from a catalogue to bagpipes-formatted data.
 
@@ -28,7 +30,7 @@ def load_photom_bagpipes(
     ----------
     str_id : str
         The ID of the object in the photometric catalogue to fit.
-    phot_cat : os.PathLike
+    phot_cat : Table | os.PathLike
         The location of the photometric catalogue.
     id_colname : str, optional
         The name of the column containing ``str_id``, by default
@@ -43,6 +45,13 @@ def load_photom_bagpipes(
         uncertainties. By default ``extra_frac_err=0.1``, i.e. 10% of the
         measured flux will be added in quadrature to the estimated
         uncertainty.
+    line_mapping : dict, optional
+        A dictionary mapping the column names of emission line fluxes to
+        one or more emission line names as used in CLOUDY, e.g.:
+        ``{"o2_3727_3730": ["Blnd  3726.00A", "Blnd  3729.00A"],}``.
+    line_cat : Table | os.PathLike, optional
+        The name of the table containing the emission line fluxes, if
+        different to ``phot_cat``.
 
     Returns
     -------
@@ -81,7 +90,34 @@ def load_photom_bagpipes(
     )
     flux[bad_values] = 0.0
     flux_err[bad_values] = 1e30
-    return np.c_[flux, flux_err]
+
+    if line_mapping is None:
+        return np.c_[flux, flux_err]
+    else:
+        if line_cat is None:
+            line_cat = phot_cat
+        if not isinstance(line_cat, Table):
+            line_cat = Table.read(line_cat, hdu=cat_hdu_index)
+
+        row_idx = (line_cat[id_colname] == int(str_id)).nonzero()[0][0]
+        em_lines = []
+        em_lines_errs = []
+        for l, n in line_mapping.items():
+            em_lines.append(line_cat[f"{l}_flux"][row_idx])
+            em_lines_errs.append(line_cat[f"{l}_error"][row_idx])
+        em_lines = np.asarray(em_lines)
+        em_lines_errs = np.asarray(em_lines_errs)
+        em_lines_errs = np.sqrt(em_lines_errs**2 + (extra_frac_err * em_lines) ** 2)
+        bad_values = (
+            ~np.isfinite(em_lines)
+            | (em_lines <= 0)
+            | ~np.isfinite(em_lines_errs)
+            | (em_lines_errs <= 0)
+        )
+        em_lines[bad_values] = 0.0
+        em_lines_errs[bad_values] = 1e30
+
+        return np.c_[flux, flux_err], np.c_[em_lines, em_lines_errs]
 
 
 def generate_fit_params(
