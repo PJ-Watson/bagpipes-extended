@@ -879,6 +879,8 @@ class AtlasFitter:
         """
         with h5py.File(atlas_path, "r") as file:
             fit_info_str = file.attrs["fit_instructions"]
+            fit_info_str = fit_info_str.replace("numpy.", "")
+            fit_info_str = fit_info_str.replace("np.", "")
             fit_info_str = fit_info_str.replace("array", "np.array")
             fit_info_str = fit_info_str.replace("float", "np.float")
             if eval(fit_info_str) != self.fit_instructions:

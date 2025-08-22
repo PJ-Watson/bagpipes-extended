@@ -174,6 +174,8 @@ class ObsGalaxy(bagpipes_galaxy):
             assert self.line_fluxes.shape[0] == len(
                 self.line_names
             ), "Number of emission line names does not match the number of line fluxes."
+        else:
+            self.line_names = None
 
         # Perform setup in the case of separate covariance matrix for spectrum
         if input_spec_cov_matrix:
