@@ -20,6 +20,9 @@ def load_photom_bagpipes(
     extra_frac_err: float = 0.1,
     line_mapping: dict = None,
     line_cat: Table | PathLike = None,
+    sci_suffix: str = "_sci",
+    var_suffix: str = "_var",
+    err_suffix: str = "_err",
 ) -> ArrayLike | tuple[ArrayLike, ArrayLike]:
     """
     Load photometry from a catalogue to bagpipes-formatted data.
@@ -52,6 +55,16 @@ def load_photom_bagpipes(
     line_cat : Table | os.PathLike, optional
         The name of the table containing the emission line fluxes, if
         different to ``phot_cat``.
+    sci_suffix : str, optional
+        The suffix for column names containing the flux in filters of
+        interest. By default ``"_sci"``.
+    var_suffix : str, optional
+        The suffix for column names containing the variance of the flux in
+        filters of interest. By default ``"_var"``.
+    err_suffix : str, optional
+        The suffix for column names containing the uncertainty of the flux
+        in filters of interest. By default ``"_err"``. If present, columns
+        matching ``var_suffix`` will be used instead.
 
     Returns
     -------
@@ -63,16 +76,16 @@ def load_photom_bagpipes(
     if not isinstance(phot_cat, Table):
         phot_cat = Table.read(phot_cat, hdu=cat_hdu_index)
 
-    row_idx = (phot_cat[id_colname] == int(str_id)).nonzero()[0][0]
+    row_idx = (phot_cat[id_colname].astype(int) == int(str_id)).nonzero()[0][0]
 
     fluxes = []
     errs = []
     for c in phot_cat.colnames:
-        if c.lower().endswith("_sci"):
+        if c.lower().endswith(sci_suffix):
             fluxes.append(phot_cat[c][row_idx])
-        elif c.lower().endswith("_var"):
+        elif c.lower().endswith(var_suffix):
             errs.append(np.sqrt(phot_cat[c][row_idx]))
-        elif c.lower().endswith("_err"):
+        elif c.lower().endswith(err_suffix):
             errs.append(phot_cat[c][row_idx])
 
     if zeropoint == 28.9:
@@ -125,7 +138,7 @@ def generate_fit_params(
     z_range: float = 0.01,
     num_age_bins: int = 5,
     min_age_bin: float = 30,
-    sfh_type: "str" = "continuity",
+    sfh_type: str = "continuity",
 ) -> dict:
     """
     Generate a dictionary of fit parameters for Bagpipes.
@@ -228,6 +241,8 @@ def generate_fit_params(
                 continuity["dsfr" + str(i) + "_prior_df"] = (
                     2  # Defaults to this value as in Leja19, but can be set
                 )
+
+            fit_params["continuity_varied_z"] = continuity
 
         case "dblplaw":
             fit_params["dblplaw"] = {
