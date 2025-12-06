@@ -8,7 +8,7 @@ import numpy as np
 from astropy.table import Table
 from numpy.typing import ArrayLike
 
-__all__ = ["load_photom_bagpipes", "generate_fit_params"]
+__all__ = ["load_photom_bagpipes", "load_lines_bagpipes", "generate_fit_params"]
 
 
 def load_photom_bagpipes(
@@ -133,6 +133,89 @@ def load_photom_bagpipes(
         return np.c_[flux, flux_err], np.c_[em_lines, em_lines_errs]
 
 
+def load_lines_bagpipes(
+    str_id: str,
+    line_cat: Table | PathLike = None,
+    id_colname: str = "bin_id",
+    cat_hdu_index: int | str = 0,
+    line_mapping: dict = None,
+    flux_suffix: str = "_flux",
+    err_suffix: str = "_error",
+    min_flux : float = 0.0,
+) -> ArrayLike | tuple[ArrayLike, ArrayLike]:
+    """
+    Load photometry from a catalogue to bagpipes-formatted data.
+
+    The output fluxes and uncertainties are scaled to microJanskys.
+
+    Parameters
+    ----------
+    str_id : str
+        The ID of the object in the photometric catalogue to fit.
+    id_colname : str, optional
+        The name of the column containing ``str_id``, by default
+        ``"bin_id"``.
+    zeropoint : float, optional
+        The AB magnitude zeropoint, by default ``28.9``.
+    cat_hdu_index : int | str, optional
+        The index or name of the HDU containing the photometric catalogue,
+        by default ``0``.
+    extra_frac_err : float, optional
+        An additional fractional error to be added to the photometric
+        uncertainties. By default ``extra_frac_err=0.1``, i.e. 10% of the
+        measured flux will be added in quadrature to the estimated
+        uncertainty.
+    line_mapping : dict, optional
+        A dictionary mapping the column names of emission line fluxes to
+        one or more emission line names as used in CLOUDY, e.g.:
+        ``{"o2_3727_3730": ["Blnd  3726.00A", "Blnd  3729.00A"],}``.
+    line_cat : Table | os.PathLike, optional
+        The name of the table containing the emission line fluxes, if
+        different to ``phot_cat``.
+    sci_suffix : str, optional
+        The suffix for column names containing the flux in filters of
+        interest. By default ``"_sci"``.
+    var_suffix : str, optional
+        The suffix for column names containing the variance of the flux in
+        filters of interest. By default ``"_var"``.
+    err_suffix : str, optional
+        The suffix for column names containing the uncertainty of the flux
+        in filters of interest. By default ``"_err"``. If present, columns
+        matching ``var_suffix`` will be used instead.
+
+    Returns
+    -------
+    ArrayLike
+        An Nx2 array containing the fluxes and their associated
+        uncertainties in all photometric bands.
+    """
+
+    if not isinstance(line_cat, Table):
+        line_cat = Table.read(line_cat, hdu=cat_hdu_index)
+
+    row_idx = (line_cat[id_colname] == int(str_id)).nonzero()[0][0]
+    em_lines = []
+    em_lines_errs = []
+    for l, n in line_mapping.items():
+        em_lines.append(line_cat[f"{l}{flux_suffix}"][row_idx])
+        em_lines_errs.append(line_cat[f"{l}{err_suffix}"][row_idx])
+    em_lines = np.asarray(em_lines)
+    em_lines_errs = np.asarray(em_lines_errs)
+    # em_lines_errs = np.sqrt(em_lines_errs**2 + (extra_frac_err * em_lines) ** 2)
+    bad_values = (
+        ~np.isfinite(em_lines)
+        | (em_lines <= min_flux)
+        | ~np.isfinite(em_lines_errs)
+        | (em_lines_errs <= 0)
+    )
+    em_lines[bad_values] = 0.0
+    em_lines_errs[bad_values] = 1e30
+
+    # return np.c_[list(line_mapping.values()), em_lines, em_lines_errs]
+    # return list(map(list, zip(*[list(line_mapping.values()), em_lines, em_lines_errs])))
+    return list(line_mapping.values()), np.c_[em_lines, em_lines_errs]
+
+
 def generate_fit_params(
     obj_z: float | ArrayLike,
     z_range: float = 0.01,
@@ -184,8 +267,8 @@ def generate_fit_params(
         fit_params["redshift"] = tuple(obj_z[:2])
     else:
         fit_params["redshift"] = (
-            round(obj_z - z_range / 2, 3),
-            round(obj_z + z_range / 2, 3),
+            round(obj_z - z_range / 2, 5),
+            round(obj_z + z_range / 2, 5),
         )
 
     from astropy.cosmology import FlatLambdaCDM
@@ -262,7 +345,7 @@ def generate_fit_params(
         "Av": (0.0, 2.0),
         "eta": 2.0,
     }
-    fit_params["nebular"] = {"logU": (-3.5, -2.0)}
+    fit_params["nebular"] = {"logU": (-3.5, -1.0)}
     fit_params["t_bc"] = 0.02
 
     return fit_params

@@ -149,7 +149,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         cat_filt_list: ArrayLike | None = None,
         vary_filt_list: bool = False,
         redshifts: ArrayLike | None = None,
-        redshift_sigma: float = 0.0,
+        redshift_sigma: ArrayLike | float | None = None,
         run: str = ".",
         analysis_function: Callable[[FitObj], None] | None = None,
         time_calls: bool = False,
@@ -160,8 +160,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         track_backlog: bool = False,
         spec_units: str = "ergscma",
         phot_units: str = "mujy",
-        lines_list: list | None = None,
-        lines_units: str = "CGS",
+        load_line_fluxes: Callable[[str], ArrayLike] = None,
     ):
 
         self.IDs = np.array(IDs).astype(str)
@@ -183,8 +182,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         self.index_list = index_list
         self.spec_units = spec_units
         self.phot_units = phot_units
-        self.lines_list = lines_list
-        self.lines_units = lines_units
+        self.load_line_fluxes = load_line_fluxes
 
         self.n_objects = len(self.IDs)
         self.done = np.zeros(self.IDs.shape[0]).astype(bool)
@@ -410,9 +408,10 @@ class fit_catalogue(bagpipes_fit_catalogue):
             index_list=self.index_list,
             spec_units=self.spec_units,
             phot_units=self.phot_units,
-            lines_list=self.lines_list,
-            lines_units=self.lines_units,
+            load_line_fluxes = self.load_line_fluxes
         )
+
+        print ("FIT INSTRUCTIONS:", self.fit_instructions)
 
         # Fit the object
         self.obj_fit = FitObj(

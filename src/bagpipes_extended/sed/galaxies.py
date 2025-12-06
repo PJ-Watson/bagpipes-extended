@@ -95,19 +95,20 @@ class ObsGalaxy(bagpipes_galaxy):
     def __init__(
         self,
         ID: str,
-        load_data: Callable[[str], ArrayLike],
+        load_data: Callable[[str], ArrayLike] | str | None = None,
         spec_units: str = "ergscma",
         phot_units: str = "mujy",
         spectrum_exists: bool = True,
         photometry_exists: bool = True,
         filt_list: ArrayLike | None = None,
         out_units: str = "ergscma",
+        load_line_fluxes: Callable[[str], ArrayLike] | str | None = None,
         load_indices: Callable[[str], ArrayLike] | str | None = None,
         index_list: list | None = None,
         index_redshift: float | None = None,
         input_spec_cov_matrix: bool = False,
-        lines_list: list | None = None,
-        lines_units: str = "CGS",
+        # lines_list: list | None = None,
+        # lines_units: str = "CGS",
     ):
         self.ID = str(ID)
         self.phot_units = phot_units
@@ -117,65 +118,84 @@ class ObsGalaxy(bagpipes_galaxy):
         self.photometry_exists = photometry_exists
         self.filt_list = filt_list
         self.spec_wavs = None
+        self.line_labels = None
         self.index_list = index_list
         self.index_redshift = index_redshift
 
+        # # Attempt to load the data from the load_data function.
+        # try:
+        #     if not spectrum_exists and not photometry_exists:
+        #         raise ValueError("Bagpipes: Object must have some data.")
+
+        #     elif (
+        #         (lines_list is not None)
+        #         and (not photometry_exists)
+        #         and (not spectrum_exists)
+        #     ):
+        #         raise ValueError("Line fluxes cannot be loaded without other data.")
+
+        #     elif spectrum_exists:
+        #         if not photometry_exists and (lines_list is None):
+        #             self.spectrum = load_data(self.ID)
+        #         elif photometry_exists and (lines_list is None):
+        #             self.spectrum, phot_nowavs = load_data(self.ID)
+        #         elif not photometry_exists and (lines_list is not None):
+        #             self.spectrum, line_fluxes = load_data(self.ID)
+        #         else:
+        #             self.spectrum, phot_nowavs, line_fluxes = load_data(self.ID)
+        #     else:
+        #         if photometry_exists and (lines_list is None):
+        #             phot_nowavs = load_data(self.ID)
+        #         else:
+        #             phot_nowavs, line_fluxes = load_data(self.ID)
+
+        # except ValueError:
+        #     print(
+        #         "load_data did not return expected outputs, did you "
+        #         "remember to set photometry_exists/spectrum_exists to "
+        #         "false?"
+        #     )
+        #     raise
+
         # Attempt to load the data from the load_data function.
-        try:
-            if not spectrum_exists and not photometry_exists:
-                raise ValueError("Bagpipes: Object must have some data.")
-
-            elif (
-                (lines_list is not None)
-                and (not photometry_exists)
-                and (not spectrum_exists)
-            ):
-                raise ValueError("Line fluxes cannot be loaded without other data.")
-
-            elif spectrum_exists:
-                if not photometry_exists and (lines_list is None):
+        if spectrum_exists or photometry_exists:
+            try:
+                if not photometry_exists:
                     self.spectrum = load_data(self.ID)
-                elif photometry_exists and (lines_list is None):
-                    self.spectrum, phot_nowavs = load_data(self.ID)
-                elif not photometry_exists and (lines_list is not None):
-                    self.spectrum, line_fluxes = load_data(self.ID)
-                else:
-                    self.spectrum, phot_nowavs, line_fluxes = load_data(self.ID)
-            else:
-                if photometry_exists and (lines_list is None):
-                    phot_nowavs = load_data(self.ID)
-                else:
-                    phot_nowavs, line_fluxes = load_data(self.ID)
 
-        except ValueError:
-            print(
-                "load_data did not return expected outputs, did you "
-                "remember to set photometry_exists/spectrum_exists to "
-                "false?"
-            )
-            raise
+                elif not spectrum_exists:
+                    phot_nowavs = load_data(self.ID)
+
+                else:
+                    self.spectrum, phot_nowavs = load_data(self.ID)
+
+            except TypeError:
+                    print("load_data did not return expected outputs, did you "
+                          "forget to set one or both of photometry_exists and "
+                          "spectrum_exists to False?")
+                    raise
 
         # If photometry is provided, add filter effective wavelengths to array
         if self.photometry_exists:
             self.filter_set = filters.filter_set(filt_list)
             self.photometry = np.c_[self.filter_set.eff_wavs, phot_nowavs]
 
-        # If line fluxes provided, associate these with the Cloudy line names
-        if lines_list is not None:
-            self.line_fluxes = np.array(line_fluxes)
-            if lines_units == "SI":
-                line_fluxes *= 1e3
-            self.line_names = []
-            for l in lines_list:
-                if isinstance(l, str):
-                    self.line_names.append([l])
-                else:
-                    self.line_names.append(l)
-            assert self.line_fluxes.shape[0] == len(
-                self.line_names
-            ), "Number of emission line names does not match the number of line fluxes."
-        else:
-            self.line_names = None
+        # # If line fluxes provided, associate these with the Cloudy line names
+        # if lines_list is not None:
+        #     self.line_fluxes = np.array(line_fluxes)
+        #     if lines_units == "SI":
+        #         line_fluxes *= 1e3
+        #     self.line_names = []
+        #     for l in lines_list:
+        #         if isinstance(l, str):
+        #             self.line_names.append([l])
+        #         else:
+        #             self.line_names.append(l)
+        #     assert self.line_fluxes.shape[0] == len(
+        #         self.line_names
+        #     ), "Number of emission line names does not match the number of line fluxes."
+        # else:
+        #     self.line_names = None
 
         # Perform setup in the case of separate covariance matrix for spectrum
         if input_spec_cov_matrix:
@@ -190,6 +210,10 @@ class ObsGalaxy(bagpipes_galaxy):
 
         # Perform any unit conversions.
         self._convert_units()
+
+        # Deal with loading any emission line fluxes
+        if load_line_fluxes is not None:
+            self.line_labels, self.line_fluxes = load_line_fluxes(self.ID)
 
         # Mask the regions of the spectrum specified in masks/[ID].mask
         if self.spectrum_exists:
@@ -359,10 +383,10 @@ class FittedGalaxy(bagpipes_fitted_model):
             self.K_ind = -0.5 * np.sum(log_error_factors)
             self.inv_sigma_sq_ind = 1.0 / self.galaxy.indices[:, 1] ** 2
 
-        if self.galaxy.line_names is not None:
+        if self.galaxy.line_labels is not None:
             log_error_factors = np.log(2 * np.pi * self.galaxy.line_fluxes[:, 1] ** 2)
-            self.K_em_lines = -0.5 * np.sum(log_error_factors)
-            self.inv_sigma_sq_em_lines = 1.0 / self.galaxy.line_fluxes[:, 1] ** 2
+            self.K_lines = -0.5 * np.sum(log_error_factors)
+            self.inv_sigma_sq_lines = 1.0 / self.galaxy.line_fluxes[:, 1] ** 2
 
     def lnlike(self, x: ArrayLike, ndim: int = 0, nparam: int = 0):
         """
@@ -393,12 +417,15 @@ class FittedGalaxy(bagpipes_fitted_model):
                 filt_list=self.galaxy.filt_list,
                 spec_wavs=self.galaxy.spec_wavs,
                 index_list=self.galaxy.index_list,
+                spec_units=self.galaxy.out_units,
+                phot_units=self.galaxy.out_units,
             )
 
         self.model_galaxy.update(self.model_components)
 
         # Return zero likelihood if SFH is older than the universe.
         if self.model_galaxy.sfh.unphysical:
+            self.chisq_phot = np.nan
             return -9.99 * 10**99
 
         lnlike = 0.0
@@ -412,13 +439,17 @@ class FittedGalaxy(bagpipes_fitted_model):
         if self.galaxy.index_list is not None:
             lnlike += self._lnlike_indices()
 
-        if self.galaxy.line_names is not None:
-            lnlike += self._lnlike_em_lines()
+        if self.galaxy.line_labels is not None:
+            lnlike += self._lnlike_line_fluxes()
 
         # Return zero likelihood if lnlike = nan (something went wrong).
         if np.isnan(lnlike):
             print("Bagpipes: lnlike was nan, replaced with zero probability.")
             return -9.99 * 10**99
+
+        if not np.isfinite(lnlike):
+            print("Bagpipes: lnlike was infinite, replaced with zero probability.")
+            return -9.99*10**99
 
         # Functionality for timing likelihood calls.
         if self.time_calls:
@@ -434,19 +465,38 @@ class FittedGalaxy(bagpipes_fitted_model):
                 )
 
         return lnlike
+    
+    def _lnlike_line_fluxes(self):
+        """ Calculates the log-likelihood for spectral indices. """
 
-    def _lnlike_em_lines(self):
-        """Calculate the log-likelihood for emission line fluxes."""
+        labels = self.galaxy.line_labels
+        model_line_fluxes = np.zeros_like(self.inv_sigma_sq_lines)
+        for i, line_set in enumerate(labels):
+            for l in np.atleast_1d(line_set):
+                model_line_fluxes[i] += self.model_galaxy.line_fluxes[l]
+        model_line_fluxes = np.array(model_line_fluxes)
 
-        model_em_lines = np.zeros_like(self.inv_sigma_sq_em_lines)
-        for i, line_set in enumerate(self.galaxy.line_names):
-            for l in line_set:
-                model_em_lines[i] += self.model_galaxy.line_fluxes[l]
+        diff = (self.galaxy.line_fluxes[:, 0] - model_line_fluxes)**2
+        self.chisq_lines = np.sum(diff*self.inv_sigma_sq_lines)
 
-        diff = (self.galaxy.line_fluxes[:, 0] - model_em_lines) ** 2
-        self.chisq_em_lines = np.sum(diff * self.inv_sigma_sq_em_lines)
+        return self.K_lines - 0.5*self.chisq_lines
 
-        return self.K_em_lines - 0.5 * self.chisq_em_lines
+def _lnlike_line_fluxes(self):
+    """ Calculates the log-likelihood for spectral indices. """
+
+    labels = self.galaxy.line_labels
+    model_line_fluxes = np.zeros_like(self.inv_sigma_sq_lines)
+    for i, line_set in enumerate(labels):
+        for l in np.atleast_1d(line_set):
+            model_line_fluxes[i] += self.model_galaxy.line_fluxes[l]
+    model_line_fluxes = np.array(model_line_fluxes)
+
+    diff = (self.galaxy.line_fluxes[:, 0] - model_line_fluxes)**2
+    self.chisq_lines = np.sum(diff*self.inv_sigma_sq_lines)
+
+    return self.K_lines - 0.5*self.chisq_lines
+
+bagpipes_fitted_model._lnlike_line_fluxes = _lnlike_line_fluxes
 
 
 class FitObj(bagpipes_fit_obj):
