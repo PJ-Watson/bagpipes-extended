@@ -160,7 +160,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         track_backlog: bool = False,
         spec_units: str = "ergscma",
         phot_units: str = "mujy",
-        load_line_fluxes: Callable[[str], ArrayLike] = None,
+        load_line_fluxes: Callable[[str], ArrayLike] | None = None,
     ):
 
         self.IDs = np.array(IDs).astype(str)
@@ -408,10 +408,8 @@ class fit_catalogue(bagpipes_fit_catalogue):
             index_list=self.index_list,
             spec_units=self.spec_units,
             phot_units=self.phot_units,
-            load_line_fluxes = self.load_line_fluxes
+            load_line_fluxes=self.load_line_fluxes,
         )
-
-        print ("FIT INSTRUCTIONS:", self.fit_instructions)
 
         # Fit the object
         self.obj_fit = FitObj(
@@ -473,9 +471,30 @@ class fit_catalogue(bagpipes_fit_catalogue):
             self.cat.loc[ID, "log_evidence_err"] = results["lnz_err"]
 
             if self.full_catalogue and self.photometry_exists:
-                self.cat.loc[ID, "chisq_phot"] = np.min(samples["chisq_phot"])
+
+                if self.load_line_fluxes is not None:
+
+                    samples["chisq_tot"] = (
+                        samples["chisq_phot"] + samples["chisq_lines"]
+                    )
+
+                    min_idx = np.argmin(samples["chisq_tot"])
+                    self.cat.loc[ID, "chisq_tot"] = np.min(samples["chisq_tot"])
+
+                    self.cat.loc[ID, "chisq_lines"] = samples["chisq_lines"][min_idx]
+                    n_lines = np.sum(self.galaxy.line_fluxes[:, 0] != 0.0)
+
+                    self.cat.loc[ID, "n_lines"] = n_lines
+
+                    self.cat.loc[ID, "chisq_phot"] = samples["chisq_phot"][min_idx]
+
+                else:
+                    self.cat.loc[ID, "chisq_phot"] = np.min(samples["chisq_phot"])
+
                 n_bands = np.sum(self.galaxy.photometry[:, 1] != 0.0)
+
                 self.cat.loc[ID, "n_bands"] = n_bands
+
                 if "continuity" in self.fit_instructions:
                     for i, bin_edge_i in enumerate(
                         self.fit_instructions["continuity"].get("bin_edges", [])
@@ -495,9 +514,9 @@ class fit_catalogue(bagpipes_fit_catalogue):
                     )
                     bin_edges_high = np.array(
                         self.fit_instructions["continuity_varied_z"].get(
-                            "bin_edges_high", [age_univ * 10 ** (-6)]
+                            "bin_edges_high", 0
                         )
-                    )
+                    ) + age_univ * 10 ** (-6)
                     n_bins = self.fit_instructions["continuity_varied_z"].get(
                         "n_bins", 7
                     )
@@ -548,6 +567,9 @@ class fit_catalogue(bagpipes_fit_catalogue):
         cols += ["input_redshift", "log_evidence", "log_evidence_err"]
 
         if self.full_catalogue and self.photometry_exists:
+            if self.load_line_fluxes is not None:
+                cols += ["chisq_tot", "chisq_lines", "n_lines"]
+
             cols += ["chisq_phot", "n_bands"]
 
             if "continuity" in self.fit_instructions:

@@ -18,8 +18,8 @@ def continuity_varied_z(self, sfr: ArrayLike, param: dict):
 
     bin_edges_low = np.array(param.get("bin_edges_low", [0]))
     bin_edges_high = np.array(
-        param.get("bin_edges_high", [np.floor(self.age_of_universe) * 10 ** (-6)])
-    )
+        param.get("bin_edges_high", 0)
+    ) + np.floor(self.age_of_universe) * 10 ** (-6)
     n_bins = param.get("n_bins", 7)
 
     bin_edges = (
