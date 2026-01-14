@@ -500,7 +500,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
                         self.fit_instructions["continuity"].get("bin_edges", [])
                     ):
                         self.cat.loc[ID, f"bin_edge_{i}"] = bin_edge_i
-                elif "continuity_varied_z" in self.fit_instructions:
+                elif "contvz" in self.fit_instructions:
                     try:
                         med_z = np.percentile(samples["redshift"], 50)
                     except:
@@ -508,16 +508,16 @@ class fit_catalogue(bagpipes_fit_catalogue):
 
                     age_univ = 10**9 * np.interp(med_z, utils.z_array, utils.age_at_z)
                     bin_edges_low = np.array(
-                        self.fit_instructions["continuity_varied_z"].get(
+                        self.fit_instructions["contvz"].get(
                             "bin_edges_low", [0]
                         )
                     )
                     bin_edges_high = np.array(
-                        self.fit_instructions["continuity_varied_z"].get(
+                        self.fit_instructions["contvz"].get(
                             "bin_edges_high", 0
                         )
                     ) + age_univ * 10 ** (-6)
-                    n_bins = self.fit_instructions["continuity_varied_z"].get(
+                    n_bins = self.fit_instructions["contvz"].get(
                         "n_bins", 7
                     )
 
@@ -579,11 +579,11 @@ class fit_catalogue(bagpipes_fit_catalogue):
                         len(self.fit_instructions["continuity"].get("bin_edges", []))
                     )
                 ]
-            elif "continuity_varied_z" in self.fit_instructions:
+            elif "contvz" in self.fit_instructions:
                 cols += [
                     f"bin_edge_{i}"
                     for i in np.arange(
-                        self.fit_instructions["continuity_varied_z"].get("n_bins", -1)
+                        self.fit_instructions["contvz"].get("n_bins", -1)
                         + 1
                     )
                 ]

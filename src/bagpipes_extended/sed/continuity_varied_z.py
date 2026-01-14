@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 
-def continuity_varied_z(self, sfr: ArrayLike, param: dict):
+def contvz(self, sfr: ArrayLike, param: dict):
     """
     A redshift-varying continuity SFH.
 

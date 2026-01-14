@@ -250,7 +250,7 @@ def generate_fit_params(
         first bin will range from ``(0,min_age_bin)``. By default 30.
     sfh_type : str, optional
         The type of SFH prior to generate. Currently supports `continuity`
-        (Leja+19, fixed age bins), `continuity_varied_z` (Leja+19, only
+        (Leja+19, fixed age bins), `contvz` (Leja+19, only
         the youngest age bin is fixed), and `dblplaw`.
 
     Returns
@@ -304,7 +304,7 @@ def generate_fit_params(
                 )
 
             fit_params["continuity"] = continuity
-        case "continuity_varied_z":
+        case "contvz":
 
             continuity = {
                 "massformed": (5.0, 11.0),
@@ -325,7 +325,7 @@ def generate_fit_params(
                     2  # Defaults to this value as in Leja19, but can be set
                 )
 
-            fit_params["continuity_varied_z"] = continuity
+            fit_params["contvz"] = continuity
 
         case "dblplaw":
             fit_params["dblplaw"] = {
