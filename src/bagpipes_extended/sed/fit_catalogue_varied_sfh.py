@@ -29,6 +29,7 @@ from bagpipes.catalogue import fit_catalogue as bagpipes_fit_catalogue
 from bagpipes.input.galaxy import galaxy
 
 from bagpipes_extended.sed.galaxies import FitObj, ObsGalaxy
+from bagpipes_extended.sed.plotting import mujy_summary_plot
 
 
 class fit_catalogue(bagpipes_fit_catalogue):
@@ -127,15 +128,17 @@ class fit_catalogue(bagpipes_fit_catalogue):
         The photometry will be converted to ergscma by default within the
         class.
 
-    lines_list : list, optional
-        A list of emission line names, matching those in Cloudy.This can
-        only be used if `spectrum_exists=True` or
-        `photometry_exists=True`. If `True`, the last component of
-        `load_data` should be a set of line fluxes. By default `False`.
-    lines_units : str, optional
-        By default, this is `CGS`, i.e. ergs s^-1 cm^-2. If provided as
-        SI units (`"SI"`, W m^-2), line fluxes will be converted
-        internally to CGS units.
+    load_line_fluxes : function | str, optional
+        Load observed line fluxes for a galaxy. The function should
+        return a list of line labels in Cloudy format, as well as an
+        array with a column of flux values in erg/s/cm^2/AA and a column
+        of corresponding uncertainties in the same units. It is not
+        recommended to use this functionality at the same time as loading
+        and fitting observed spectroscopic data with the code.
+
+    mujy_plot : bool, optional
+        Make an additional plot with the spectrum and photometry in
+        `"mujy"`, alongside the SFH and stellar mass histogram.
     """
 
     def __init__(
@@ -161,6 +164,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         spec_units: str = "ergscma",
         phot_units: str = "mujy",
         load_line_fluxes: Callable[[str], ArrayLike] | None = None,
+        mujy_plot: bool = False,
     ):
 
         self.IDs = np.array(IDs).astype(str)
@@ -183,6 +187,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         self.spec_units = spec_units
         self.phot_units = phot_units
         self.load_line_fluxes = load_line_fluxes
+        self.mujy_plot = mujy_plot
 
         self.n_objects = len(self.IDs)
         self.done = np.zeros(self.IDs.shape[0]).astype(bool)
@@ -191,198 +196,6 @@ class fit_catalogue(bagpipes_fit_catalogue):
 
         if rank == 0:
             utils.make_dirs(run=run)
-
-    # def fit(
-    #     self,
-    #     verbose=False,
-    #     n_live=400,
-    #     mpi_serial=False,
-    #     track_backlog=False,
-    #     sampler="multinest",
-    #     pool=1,
-    # ):
-    #     """Run through the catalogue fitting each object.
-
-    #     Parameters
-    #     ----------
-
-    #     verbose : bool - optional
-    #         Set to True to get progress updates from the sampler.
-
-    #     n_live : int - optional
-    #         Number of live points: reducing speeds up the code but may
-    #         lead to unreliable results.
-
-    #     mpi_serial : bool - optional
-    #         When running through mpirun/mpiexec, the default behaviour
-    #         is to fit one object at a time, using all available cores.
-    #         When mpi_serial=True, each core will fit different objects.
-
-    #     track_backlog : bool - optional
-    #         When using mpi_serial, report the number of objects waiting
-    #         to be added to the catalogue by the "zero" core that
-    #         compiles results from all the others. High numbers mean
-    #         cores are waiting around doing nothing.
-    #     """
-
-    #     if rank == 0:
-    #         cat_file = "pipes/cats/" + self.run + ".fits"
-    #         if os.path.exists(cat_file):
-    #             self.cat = Table.read(cat_file).to_pandas()
-    #             self.cat.index = self.IDs
-    #             self.done = (self.cat.loc[:, "log_evidence"] != 0.0).values
-
-    #     if size > 1 and mpi_serial:
-    #         self._fit_mpi_serial(n_live=n_live, track_backlog=track_backlog)
-    #         return
-
-    #     for i in range(self.n_objects):
-
-    #         # Check to see if the object has been fitted already
-    #         if rank == 0:
-    #             obj_done = self.done[i]
-
-    #             for j in range(1, size):
-    #                 comm.send(obj_done, dest=j)
-
-    #         else:
-    #             obj_done = comm.recv(source=0)
-
-    #         if obj_done:
-    #             continue
-
-    #         # If not fit the object and update the output catalogue
-    #         self._fit_object(
-    #             self.IDs[i], verbose=verbose, n_live=n_live, sampler=sampler, pool=pool
-    #         )
-
-    #         self.done[i] = True
-
-    #         # Save the updated output catalogue.
-    #         if rank == 0:
-    #             save_cat = Table.from_pandas(self.cat)
-    #             save_cat.write(
-    #                 "pipes/cats/" + self.run + ".fits", format="fits", overwrite=True
-    #             )
-
-    #             print(
-    #                 "Bagpipes:",
-    #                 np.sum(self.done),
-    #                 "out of",
-    #                 self.done.shape[0],
-    #                 "objects completed.",
-    #             )
-
-    # def _fit_mpi_serial(
-    #     self, verbose=False, n_live=400, track_backlog=False, sampler="multinest"
-    # ):
-    #     """Run through the catalogue fitting multiple objects at once
-    #     on different cores."""
-
-    #     self.done = self.done.astype(int)
-    #     self.done[self.done == 1] += 1
-
-    #     if rank == 0:  # The 0 process manages others, does no fitting
-    #         for i in range(1, size):
-    #             if not np.min(self.done):  # give out first IDs to fit
-    #                 newID = self.IDs[np.argmin(self.done)]
-    #                 comm.send(newID, dest=i)
-    #                 self.done[np.argmin(self.done)] += 1
-
-    #             else:  # Alternatively tell process all objects are done
-    #                 comm.send(None, dest=i)
-
-    #         if np.min(self.done) == 2:  # If all objects are done end
-    #             return
-
-    #         while True:  # Add results to catalogue + distribute new IDs
-    #             # Wait for an object to be finished by any process
-    #             oldID, done_rank = comm.recv(source=MPI.ANY_SOURCE)
-    #             self.done[self.IDs == oldID] += 1  # mark as done
-
-    #             if not np.min(self.done):  # Send new ID to process
-    #                 newID = self.IDs[np.argmin(self.done != 0)]
-    #                 self.done[self.IDs == newID] += 1  # mark in prep
-    #                 comm.send(newID, dest=done_rank)  # send new ID
-
-    #             else:  # Alternatively tell process all objects are done
-    #                 comm.send(None, dest=done_rank)
-
-    #             # Load posterior for finished object to update catalogue
-    #             self._fit_object(
-    #                 oldID, use_MPI=False, verbose=False, n_live=n_live, sampler=sampler
-    #             )
-
-    #             save_cat = Table.from_pandas(self.cat)
-    #             save_cat.write(
-    #                 "pipes/cats/" + self.run + ".fits", format="fits", overwrite=True
-    #             )
-
-    #             if track_backlog:
-    #                 n_done = len(glob("pipes/posterior/" + self.run + "/*.h5"))
-    #                 n_cat = np.sum(self.cat["stellar_mass_50"] > 0.0)
-    #                 backlog = n_done - n_cat
-
-    #                 print(
-    #                     "Bagpipes:",
-    #                     np.sum(self.done == 2),
-    #                     "out of",
-    #                     self.done.shape[0],
-    #                     "objects completed.",
-    #                     "Backlog:",
-    #                     backlog,
-    #                     "/",
-    #                     size - 1,
-    #                     "cores",
-    #                 )
-    #             else:
-    #                 print(
-    #                     "Bagpipes:",
-    #                     np.sum(self.done == 2),
-    #                     "out of",
-    #                     self.done.shape[0],
-    #                     "objects completed.",
-    #                 )
-
-    #             if np.min(self.done) == 2:  # if all objects done end
-    #                 return
-
-    #     else:  # All ranks other than 0 fit objects as directed by 0
-    #         while True:
-    #             ID = comm.recv(source=0)  # receive new ID to fit
-
-    #             if ID is None:  # If no new ID is given then end
-    #                 return
-
-    #             self.n_posterior = 5  # hacky, these don't get used
-    #             self._fit_object(
-    #                 ID, use_MPI=False, verbose=False, n_live=n_live, sampler=sampler
-    #             )
-
-    #             comm.send([ID, rank], dest=0)  # Tell 0 object is done
-
-    # def _set_redshift(self, ID):
-    #     """Sets the corrrect redshift (range) in self.fit_instructions
-    #     for the object being fitted."""
-
-    #     if self.redshifts is not None:
-    #         ind = np.argmax(self.IDs == ID)
-
-    #         if self.redshift_sigma > 0.:
-    #             z = self.redshifts[ind]
-    #             sig = self.redshift_sigma
-    #             self.fit_instructions["redshift_prior"] = "Gaussian"
-    #             self.fit_instructions["redshift_prior_mu"] = z
-    #             self.fit_instructions["redshift_prior_sigma"] = sig
-    #             self.fit_instructions["redshift"] = (z - 3*sig, z + 3*sig)
-
-    #         else:
-    #             self.fit_instructions["redshift"] = self.redshifts[ind]
-
-    #         # self.fit_instructions = generate_fit_params(
-    #         #     self.redshifts[ind],
-    #         #     z_range=0,
-    #         # )
 
     def _fit_object(
         self, ID, verbose=False, n_live=400, use_MPI=True, sampler="multinest", pool=1
@@ -425,7 +238,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         )
 
         if rank == 0:
-            print(self.fit_instructions)
+            # print(self.fit_instructions)
             if self.vars is None:
                 self._setup_vars()
 
@@ -442,11 +255,17 @@ class fit_catalogue(bagpipes_fit_catalogue):
                 self.obj_fit.plot_1d_posterior()
                 self.obj_fit.plot_sfh_posterior()
 
+                if self.mujy_plot:
+                    mujy_summary_plot(self.obj_fit)
+
                 if "calib" in list(self.obj_fit.fitted_model.fit_instructions):
                     self.obj_fit.plot_calibration()
 
             # Add fitting results to output catalogue
-            if self.full_catalogue:
+            # Avoid calculating advanced quantities if already done for plots
+            if self.full_catalogue and not (
+                "spectrum_full" in list(self.obj_fit.posterior.samples)
+            ):
                 self.obj_fit.posterior.get_advanced_quantities()
 
             samples = self.obj_fit.posterior.samples
@@ -508,18 +327,12 @@ class fit_catalogue(bagpipes_fit_catalogue):
 
                     age_univ = 10**9 * np.interp(med_z, utils.z_array, utils.age_at_z)
                     bin_edges_low = np.array(
-                        self.fit_instructions["contvz"].get(
-                            "bin_edges_low", [0]
-                        )
+                        self.fit_instructions["contvz"].get("bin_edges_low", [0])
                     )
                     bin_edges_high = np.array(
-                        self.fit_instructions["contvz"].get(
-                            "bin_edges_high", 0
-                        )
+                        self.fit_instructions["contvz"].get("bin_edges_high", 0)
                     ) + age_univ * 10 ** (-6)
-                    n_bins = self.fit_instructions["contvz"].get(
-                        "n_bins", 7
-                    )
+                    n_bins = self.fit_instructions["contvz"].get("n_bins", 7)
 
                     bin_edges = np.concatenate(
                         [
@@ -555,7 +368,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
         ]
 
         if self.full_catalogue:
-            self.vars += ["UV_colour", "VJ_colour"]
+            self.vars += ["UV_colour", "VJ_colour", "tform10", "tform50", "tform90"]
 
     def _setup_catalogue(self):
         """Set up the initial blank output catalogue."""
@@ -583,8 +396,7 @@ class fit_catalogue(bagpipes_fit_catalogue):
                 cols += [
                     f"bin_edge_{i}"
                     for i in np.arange(
-                        self.fit_instructions["contvz"].get("n_bins", -1)
-                        + 1
+                        self.fit_instructions["contvz"].get("n_bins", -1) + 1
                     )
                 ]
 

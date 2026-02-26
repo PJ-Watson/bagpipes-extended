@@ -135,59 +135,61 @@ def load_photom_bagpipes(
 
 def load_lines_bagpipes(
     str_id: str,
+    line_mapping: dict,
     line_cat: Table | PathLike = None,
     id_colname: str = "bin_id",
     cat_hdu_index: int | str = 0,
-    line_mapping: dict = None,
-    flux_suffix: str = "_flux",
-    err_suffix: str = "_error",
-    min_flux : float = 0.0,
-) -> ArrayLike | tuple[ArrayLike, ArrayLike]:
+    flux_prefix: str = "flux_",
+    err_prefix: str = "err_",
+    flux_suffix: str = "",
+    err_suffix: str = "",
+    min_flux: float = 0.0,
+) -> tuple[ArrayLike, ArrayLike]:
     """
-    Load photometry from a catalogue to bagpipes-formatted data.
+    Load emission lines from a catalogue to bagpipes-formatted data.
 
-    The output fluxes and uncertainties are scaled to microJanskys.
+    The fluxes and uncertainties should be in ergs/s/cm2.
 
     Parameters
     ----------
     str_id : str
         The ID of the object in the photometric catalogue to fit.
-    id_colname : str, optional
-        The name of the column containing ``str_id``, by default
-        ``"bin_id"``.
-    zeropoint : float, optional
-        The AB magnitude zeropoint, by default ``28.9``.
-    cat_hdu_index : int | str, optional
-        The index or name of the HDU containing the photometric catalogue,
-        by default ``0``.
-    extra_frac_err : float, optional
-        An additional fractional error to be added to the photometric
-        uncertainties. By default ``extra_frac_err=0.1``, i.e. 10% of the
-        measured flux will be added in quadrature to the estimated
-        uncertainty.
-    line_mapping : dict, optional
+    line_mapping : dict
         A dictionary mapping the column names of emission line fluxes to
         one or more emission line names as used in CLOUDY, e.g.:
         ``{"o2_3727_3730": ["Blnd  3726.00A", "Blnd  3729.00A"],}``.
-    line_cat : Table | os.PathLike, optional
-        The name of the table containing the emission line fluxes, if
-        different to ``phot_cat``.
-    sci_suffix : str, optional
-        The suffix for column names containing the flux in filters of
-        interest. By default ``"_sci"``.
-    var_suffix : str, optional
-        The suffix for column names containing the variance of the flux in
-        filters of interest. By default ``"_var"``.
+    line_cat : Table | os.PathLike
+        The location of the emission line catalogue.
+    id_colname : str, optional
+        The name of the column containing ``str_id``, by default
+        ``"bin_id"``.
+    cat_hdu_index : int | str, optional
+        The index or name of the HDU containing the photometric catalogue,
+        by default ``0``.
+    flux_prefix : str, optional
+        The prefix for column names containing the emission line fluxes,
+        by default ``"flux_"``.
+    err_prefix : str, optional
+        The prefix for column names containing the uncertainties on the
+        emission line fluxes, by default ``"err_"``.
+    flux_suffix : str, optional
+        The prefix for column names containing the emission line fluxes,
+        by default ``""``.
     err_suffix : str, optional
-        The suffix for column names containing the uncertainty of the flux
-        in filters of interest. By default ``"_err"``. If present, columns
-        matching ``var_suffix`` will be used instead.
+        The suffix for column names containing the uncertainties on the
+        emission line fluxes, by default ``""``.
+    min_flux : float, optional
+        The minimum flux for an emission line to be included in the fit,
+        by default `0.0`.
 
     Returns
     -------
-    ArrayLike
+    cloudy_names
+        A list of length N, where each entry is a list of one or more
+        CLOUDY line names.
+    emline_data
         An Nx2 array containing the fluxes and their associated
-        uncertainties in all photometric bands.
+        uncertainties for all requested lines.
     """
 
     if not isinstance(line_cat, Table):
@@ -197,14 +199,13 @@ def load_lines_bagpipes(
     em_lines = []
     em_lines_errs = []
     for l, n in line_mapping.items():
-        em_lines.append(line_cat[f"{l}{flux_suffix}"][row_idx])
-        em_lines_errs.append(line_cat[f"{l}{err_suffix}"][row_idx])
+        em_lines.append(line_cat[f"{flux_prefix}{l}{flux_suffix}"][row_idx])
+        em_lines_errs.append(line_cat[f"{err_prefix}{l}{err_suffix}"][row_idx])
     em_lines = np.asarray(em_lines)
     em_lines_errs = np.asarray(em_lines_errs)
-    # em_lines_errs = np.sqrt(em_lines_errs**2 + (extra_frac_err * em_lines) ** 2)
     bad_values = (
         ~np.isfinite(em_lines)
-        | (em_lines <= min_flux)
+        | (em_lines < min_flux)
         | ~np.isfinite(em_lines_errs)
         | (em_lines_errs <= 0)
     )

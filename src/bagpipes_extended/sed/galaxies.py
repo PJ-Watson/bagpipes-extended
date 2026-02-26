@@ -6,13 +6,14 @@ from copy import deepcopy
 
 import h5py
 import numpy as np
-from bagpipes import filters, utils
+from bagpipes import config, filters, utils
 from bagpipes.fitting import fitted_model as bagpipes_fitted_model
 from bagpipes.fitting.fit import fit as bagpipes_fit_obj
 from bagpipes.fitting.posterior import posterior
 from bagpipes.input.galaxy import galaxy as bagpipes_galaxy
 from bagpipes.input.spectral_indices import measure_index
 from bagpipes.models import model_galaxy as bagpipes_model_galaxy
+from bagpipes.models import star_formation_history as bagpipes_star_formation_history
 from numpy.typing import ArrayLike
 
 # detect if run through mpiexec/mpirun
@@ -28,23 +29,100 @@ except ImportError:
     size = 1
 
 
+def mod_calculate_derived_quantities(self):
+    """
+    Calculate derived quantities from the star fformation history.
+
+    This extends the bagpipes functionality to include additional
+    nth percentile formation times.
+    """
+
+    self.stellar_mass = np.log10(np.sum(self.live_frac_grid * self.ceh.grid))
+    self.formed_mass = np.log10(np.sum(self.ceh.grid))
+
+    age_mask = self.ages < config.sfr_timescale
+    self.sfr = np.sum(self.sfh[age_mask] * self.age_widths[age_mask])
+    self.sfr /= self.age_widths[age_mask].sum()
+
+    # ssfr and nsfr: if sfr=0, set as nan to avoid divide by 0 warning
+    if self.sfr == 0:
+        self.ssfr = np.nan
+        self.nsfr = np.nan
+    else:
+        self.ssfr = np.log10(self.sfr) - self.stellar_mass
+        self.nsfr = np.log10(self.sfr * self.age_of_universe) - self.stellar_mass
+
+    self.mass_weighted_age = np.sum(self.sfh * self.age_widths * self.ages)
+    self.mass_weighted_age /= np.sum(self.sfh * self.age_widths)
+
+    # Calculate nth percentile formation time
+    perc = 90
+    cum_sfh = np.cumsum(self.sfh * self.age_widths) / np.sum(self.sfh * self.age_widths)
+    self.tform10 = (
+        self.age_of_universe
+        - self.ages[np.argmin(np.abs(cum_sfh - (100 - 10) / 100.0))]
+    ) * 10**-9
+    self.tform50 = (
+        self.age_of_universe
+        - self.ages[np.argmin(np.abs(cum_sfh - (100 - 50) / 100.0))]
+    ) * 10**-9
+    self.tform90 = (
+        self.age_of_universe
+        - self.ages[np.argmin(np.abs(cum_sfh - (100 - 90) / 100.0))]
+    ) * 10**-9
+    # self.tform_percentile = self.ages[np.argmin(np.abs(cum_sfh - (100 - perc)/100.))]  # In years
+
+    self.mass_weighted_zmet = np.sum(self.live_frac_grid * self.ceh.grid, axis=1)
+    self.mass_weighted_zmet /= np.sum(self.live_frac_grid * self.ceh.grid)
+    self.mass_weighted_zmet *= config.metallicities
+    self.mass_weighted_zmet = np.sum(self.mass_weighted_zmet)
+
+    self.tform = self.age_of_universe - self.mass_weighted_age
+
+    self.tform *= 10**-9
+    self.mass_weighted_age *= 10**-9
+
+    mass_assembly = np.cumsum(self.sfh[::-1] * self.age_widths[::-1])[::-1]
+    tunivs = self.age_of_universe - self.ages
+    mean_sfrs = mass_assembly / tunivs
+    normed_sfrs = np.zeros_like(self.sfh)
+    sf_mask = self.sfh > 0.0
+    normed_sfrs[sf_mask] = self.sfh[sf_mask] / mean_sfrs[sf_mask]
+
+    if self.sfr > 0.1 * mean_sfrs[0]:
+        self.tquench = 99.0
+
+    else:
+        quench_ind = np.argmax(normed_sfrs > 0.1)
+        self.tquench = tunivs[quench_ind] * 10**-9
+
+
+bagpipes_star_formation_history._calculate_derived_quantities = (
+    mod_calculate_derived_quantities
+)
+
+
 def mod_get_advanced_quantities(self):
-    """Calculates advanced derived posterior quantities, these are
-    slower because they require the full model spectra. """
+    """
+    Calculate advanced derived posterior quantities.
+
+    These are slower because they require the full model spectra.
+    """
 
     if "spectrum_full" in list(self.samples):
         return
 
     self.fitted_model._update_model_components(self.samples2d[0, :])
-    self.model_galaxy = bagpipes_model_galaxy(self.fitted_model.model_components,
-                                        filt_list=self.galaxy.filt_list,
-                                        spec_wavs=self.galaxy.spec_wavs,
-                                        index_list=self.galaxy.index_list,
-                                        spec_units=self.galaxy.out_units,
-                                        phot_units=self.galaxy.out_units)
+    self.model_galaxy = bagpipes_model_galaxy(
+        self.fitted_model.model_components,
+        filt_list=self.galaxy.filt_list,
+        spec_wavs=self.galaxy.spec_wavs,
+        index_list=self.galaxy.index_list,
+        spec_units=self.galaxy.out_units,
+        phot_units=self.galaxy.out_units,
+    )
 
-    all_names = ["photometry", "spectrum", "spectrum_full", "uvj",
-                    "indices"]
+    all_names = ["photometry", "spectrum", "spectrum_full", "uvj", "indices"]
 
     all_model_keys = dir(self.model_galaxy)
     quantity_names = [q for q in all_names if q in all_model_keys]
@@ -89,7 +167,9 @@ def mod_get_advanced_quantities(self):
             self.samples["chisq_lines"][i] = self.fitted_model.chisq_lines
 
         if "dla" in list(self.fitted_model.model_components):
-            self.samples["dla_transmission"][i] = self.fitted_model.model_galaxy.dla_trans
+            self.samples["dla_transmission"][
+                i
+            ] = self.fitted_model.model_galaxy.dla_trans
 
         if "dust" in list(self.fitted_model.model_components):
             dust_curve = self.fitted_model.model_galaxy.dust_atten.A_cont
@@ -113,6 +193,55 @@ def mod_get_advanced_quantities(self):
 
 
 posterior.get_advanced_quantities = mod_get_advanced_quantities
+
+
+def mod_get_basic_quantities(self):
+    """
+    Calculate basic posterior quantities.
+
+    These are fast as they are derived only from the SFH model, not the
+    spectral model.
+    """
+
+    if "stellar_mass" in list(self.samples):
+        return
+
+    self.fitted_model._update_model_components(self.samples2d[0, :])
+    self.sfh = bagpipes_star_formation_history(self.fitted_model.model_components)
+
+    quantity_names = [
+        "stellar_mass",
+        "formed_mass",
+        "sfr",
+        "ssfr",
+        "nsfr",
+        "mass_weighted_age",
+        "tform",
+        "tquench",
+        "tform10",
+        "tform50",
+        "tform90",
+        "mass_weighted_zmet",
+    ]
+
+    for q in quantity_names:
+        self.samples[q] = np.zeros(self.n_samples)
+
+    self.samples["sfh"] = np.zeros((self.n_samples, self.sfh.ages.shape[0]))
+
+    quantity_names += ["sfh"]
+
+    for i in range(self.n_samples):
+        param = self.samples2d[self.indices[i], :]
+        self.fitted_model._update_model_components(param)
+        self.sfh.update(self.fitted_model.model_components)
+
+        for q in quantity_names:
+            self.samples[q][i] = getattr(self.sfh, q)
+
+
+posterior.get_basic_quantities = mod_get_basic_quantities
+
 
 class ObsGalaxy(bagpipes_galaxy):
     """
@@ -152,6 +281,13 @@ class ObsGalaxy(bagpipes_galaxy):
     out_units : str, optional
         Units to convert the inputs to within the class. Defaults to
         ergs s^-1 cm^-2 A^-1, “ergscma”.
+    load_line_fluxes : function or str, optional
+        Load observed line fluxes for a galaxy. The function should
+        return a list of line labels in Cloudy format, as well as an
+        array with a column of flux values in erg/s/cm^2/AA and a column
+        of corresponding uncertainties in the same units. It is not
+        recommended to use this functionality at the same time as loading
+        and fitting observed spectroscopic data with the code.
     load_indices : function or str, optional
         Load spectral index information for the galaxy. This can either
         be a function which takes the galaxy ID and returns index values
@@ -167,15 +303,6 @@ class ObsGalaxy(bagpipes_galaxy):
     input_spec_cov_matrix : bool, optional
         If `True`, the input spectroscopy is expected to contain the
         covariance matrix.
-    lines_list : list, optional
-        A list of emission line names, matching those in Cloudy.This can
-        only be used if `spectrum_exists=True` or
-        `photometry_exists=True`. If `True`, the last component of
-        `load_data` should be a set of line fluxes. By default `False`.
-    lines_units : str, optional
-        By default, this is `CGS`, i.e. ergs s^-1 cm^-2. If provided as
-        SI units (`"SI"`, W m^-2), line fluxes will be converted
-        internally to CGS units.
     """
 
     def __init__(
@@ -193,8 +320,6 @@ class ObsGalaxy(bagpipes_galaxy):
         index_list: list | None = None,
         index_redshift: float | None = None,
         input_spec_cov_matrix: bool = False,
-        # lines_list: list | None = None,
-        # lines_units: str = "CGS",
     ):
         self.ID = str(ID)
         self.phot_units = phot_units
@@ -207,41 +332,6 @@ class ObsGalaxy(bagpipes_galaxy):
         self.line_labels = None
         self.index_list = index_list
         self.index_redshift = index_redshift
-
-        # # Attempt to load the data from the load_data function.
-        # try:
-        #     if not spectrum_exists and not photometry_exists:
-        #         raise ValueError("Bagpipes: Object must have some data.")
-
-        #     elif (
-        #         (lines_list is not None)
-        #         and (not photometry_exists)
-        #         and (not spectrum_exists)
-        #     ):
-        #         raise ValueError("Line fluxes cannot be loaded without other data.")
-
-        #     elif spectrum_exists:
-        #         if not photometry_exists and (lines_list is None):
-        #             self.spectrum = load_data(self.ID)
-        #         elif photometry_exists and (lines_list is None):
-        #             self.spectrum, phot_nowavs = load_data(self.ID)
-        #         elif not photometry_exists and (lines_list is not None):
-        #             self.spectrum, line_fluxes = load_data(self.ID)
-        #         else:
-        #             self.spectrum, phot_nowavs, line_fluxes = load_data(self.ID)
-        #     else:
-        #         if photometry_exists and (lines_list is None):
-        #             phot_nowavs = load_data(self.ID)
-        #         else:
-        #             phot_nowavs, line_fluxes = load_data(self.ID)
-
-        # except ValueError:
-        #     print(
-        #         "load_data did not return expected outputs, did you "
-        #         "remember to set photometry_exists/spectrum_exists to "
-        #         "false?"
-        #     )
-        #     raise
 
         # Attempt to load the data from the load_data function.
         if spectrum_exists or photometry_exists:
@@ -256,32 +346,17 @@ class ObsGalaxy(bagpipes_galaxy):
                     self.spectrum, phot_nowavs = load_data(self.ID)
 
             except TypeError:
-                    print("load_data did not return expected outputs, did you "
-                          "forget to set one or both of photometry_exists and "
-                          "spectrum_exists to False?")
-                    raise
+                print(
+                    "load_data did not return expected outputs, did you "
+                    "forget to set one or both of photometry_exists and "
+                    "spectrum_exists to False?"
+                )
+                raise
 
         # If photometry is provided, add filter effective wavelengths to array
         if self.photometry_exists:
             self.filter_set = filters.filter_set(filt_list)
             self.photometry = np.c_[self.filter_set.eff_wavs, phot_nowavs]
-
-        # # If line fluxes provided, associate these with the Cloudy line names
-        # if lines_list is not None:
-        #     self.line_fluxes = np.array(line_fluxes)
-        #     if lines_units == "SI":
-        #         line_fluxes *= 1e3
-        #     self.line_names = []
-        #     for l in lines_list:
-        #         if isinstance(l, str):
-        #             self.line_names.append([l])
-        #         else:
-        #             self.line_names.append(l)
-        #     assert self.line_fluxes.shape[0] == len(
-        #         self.line_names
-        #     ), "Number of emission line names does not match the number of line fluxes."
-        # else:
-        #     self.line_names = None
 
         # Perform setup in the case of separate covariance matrix for spectrum
         if input_spec_cov_matrix:
@@ -338,119 +413,23 @@ class ObsGalaxy(bagpipes_galaxy):
                     )
 
 
-# class ModelGalaxy(bagpipes_model_galaxy):
-#     """
-#     Builds model galaxy spectra.
+def _lnlike_line_fluxes(self):
+    """Calculates the log-likelihood for spectral indices."""
 
-#     Can calculate predictions for spectroscopic and photometric observables.
+    labels = self.galaxy.line_labels
+    model_line_fluxes = np.zeros_like(self.inv_sigma_sq_lines)
+    for i, line_set in enumerate(labels):
+        for l in np.atleast_1d(line_set):
+            model_line_fluxes[i] += self.model_galaxy.line_fluxes[l]
+    model_line_fluxes = np.array(model_line_fluxes)
 
-#     Parameters
-#     ----------
-#     model_components : dict
-#         A dictionary containing information about the model you wish to
-#         generate.
-#     filt_list : list, optional
-#         A list of paths to filter curve files, which should contain a
-#         column of wavelengths in angstroms followed by a column of
-#         transmitted fraction values. Only required if photometric output
-#         is desired.
-#     spec_wavs : array, optional
-#         An array of wavelengths at which spectral fluxes should be
-#         returned. Only required if spectroscopic output is desired.
-#     spec_units : str, optional
-#         The units the output spectrum will be returned in. Default is
-#         "ergscma" for ergs per second per centimetre squared per
-#         angstrom, can also be set to "mujy" for microjanskys.
-#     phot_units : str, optional
-#         The units the output spectrum will be returned in. Default is
-#         "ergscma" for ergs per second per centimetre squared per
-#         angstrom, can also be set to "mujy" for microjanskys.
-#     index_list : list, optional
-#         A list of dicts containining definitions for spectral indices.
-#     lines_list : list, optional
-#         A list of emission line names, matching those in Cloudy.
-#     """
+    diff = (self.galaxy.line_fluxes[:, 0] - model_line_fluxes) ** 2
+    self.chisq_lines = np.sum(diff * self.inv_sigma_sq_lines)
 
-#     def __init__(
-#         self,
-#         model_components : dict,
-#         filt_list : list | None = None,
-#         spec_wavs : ArrayLike | None =None,
-#         spec_units:str="ergscma",
-#         phot_units: str="ergscma",
-#         index_list: list|None=None,
-#         lines_list: list | None = None,
-#     ):
+    return self.K_lines - 0.5 * self.chisq_lines
 
-#         if (spec_wavs is not None) and (index_list is not None):
-#             raise ValueError("Cannot specify both spec_wavs and index_list.")
 
-#         if model_components["redshift"] > config.max_redshift:
-#             raise ValueError(
-#                 "Bagpipes attempted to create a model with too "
-#                 "high redshift. Please increase max_redshift in "
-#                 "bagpipes/config.py before making this model."
-#             )
-
-#         self.spec_wavs = spec_wavs
-#         self.filt_list = filt_list
-#         self.spec_units = spec_units
-#         self.phot_units = phot_units
-#         self.index_list = index_list
-#         self.lines_list = lines_list
-
-#         if self.index_list is not None:
-#             self.spec_wavs = self._get_index_spec_wavs(model_components)
-
-#         # Create a filter_set object to manage the filter curves.
-#         if filt_list is not None:
-#             self.filter_set = filters.filter_set(filt_list)
-
-#         # Calculate the optimal wavelength sampling for the model.
-#         self.wavelengths = self._get_wavelength_sampling()
-
-#         # Resample the filter curves onto wavelengths.
-#         if filt_list is not None:
-#             self.filter_set.resample_filter_curves(self.wavelengths)
-
-#         # Set up a filter_set for calculating rest-frame UVJ magnitudes.
-#         uvj_filt_list = np.loadtxt(
-#             utils.install_dir + "/filters/UVJ.filt_list", dtype="str"
-#         )
-
-#         self.uvj_filter_set = filters.filter_set(uvj_filt_list)
-#         self.uvj_filter_set.resample_filter_curves(self.wavelengths)
-
-#         # Create relevant physical models.
-#         self.sfh = star_formation_history(model_components)
-#         self.stellar = stellar(self.wavelengths)
-#         self.igm = igm(self.wavelengths)
-#         self.nebular = False
-#         self.dust_atten = False
-#         self.dust_emission = False
-#         self.agn = False
-
-#         if "nebular" in list(model_components):
-#             if "velshift" not in model_components["nebular"]:
-#                 model_components["nebular"]["velshift"] = 0.0
-
-#             self.nebular = nebular(
-#                 self.wavelengths, model_components["nebular"]["velshift"]
-#             )
-
-#             if "metallicity" in list(model_components["nebular"]):
-#                 self.neb_sfh = star_formation_history(model_components)
-
-#         if "dust" in list(model_components):
-#             self.dust_emission = dust_emission(self.wavelengths)
-#             self.dust_atten = dust_attenuation(
-#                 self.wavelengths, model_components["dust"]
-#             )
-
-#         if "agn" in list(model_components):
-#             self.agn = agn(self.wavelengths)
-
-#         self.update(model_components)
+bagpipes_fitted_model._lnlike_line_fluxes = _lnlike_line_fluxes
 
 
 class FittedGalaxy(bagpipes_fitted_model):
@@ -535,7 +514,7 @@ class FittedGalaxy(bagpipes_fitted_model):
 
         if not np.isfinite(lnlike):
             print("Bagpipes: lnlike was infinite, replaced with zero probability.")
-            return -9.99*10**99
+            return -9.99 * 10**99
 
         # Functionality for timing likelihood calls.
         if self.time_calls:
@@ -551,38 +530,6 @@ class FittedGalaxy(bagpipes_fitted_model):
                 )
 
         return lnlike
-    
-    def _lnlike_line_fluxes(self):
-        """ Calculates the log-likelihood for spectral indices. """
-
-        labels = self.galaxy.line_labels
-        model_line_fluxes = np.zeros_like(self.inv_sigma_sq_lines)
-        for i, line_set in enumerate(labels):
-            for l in np.atleast_1d(line_set):
-                model_line_fluxes[i] += self.model_galaxy.line_fluxes[l]
-        model_line_fluxes = np.array(model_line_fluxes)
-
-        diff = (self.galaxy.line_fluxes[:, 0] - model_line_fluxes)**2
-        self.chisq_lines = np.sum(diff*self.inv_sigma_sq_lines)
-
-        return self.K_lines - 0.5*self.chisq_lines
-
-def _lnlike_line_fluxes(self):
-    """ Calculates the log-likelihood for spectral indices. """
-
-    labels = self.galaxy.line_labels
-    model_line_fluxes = np.zeros_like(self.inv_sigma_sq_lines)
-    for i, line_set in enumerate(labels):
-        for l in np.atleast_1d(line_set):
-            model_line_fluxes[i] += self.model_galaxy.line_fluxes[l]
-    model_line_fluxes = np.array(model_line_fluxes)
-
-    diff = (self.galaxy.line_fluxes[:, 0] - model_line_fluxes)**2
-    self.chisq_lines = np.sum(diff*self.inv_sigma_sq_lines)
-
-    return self.K_lines - 0.5*self.chisq_lines
-
-bagpipes_fitted_model._lnlike_line_fluxes = _lnlike_line_fluxes
 
 
 class FitObj(bagpipes_fit_obj):
