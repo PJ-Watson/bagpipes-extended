@@ -341,8 +341,18 @@ def generate_fit_params(
                 "tau": (0.1, np.floor(age_at_z * 1e3) / 1e3),
             }
 
+        case "delayed":
+            fit_params["delayed"] = {
+                "massformed": (5.0, 11.0),
+                "metallicity": (0.0, 3.0),
+                "metallicity_prior_mu": 1.0,
+                "metallicity_prior_sigma": 0.5,
+                "age": (0.1, np.floor(age_at_z * 1e3) / 1e3),
+                "tau": (0.1, np.floor(age_at_z * 1e3) / 1e3),
+            }
+
     fit_params["dust"] = {
-        "type": "Cardelli",
+        "type": "Calzetti",
         "Av": (0.0, 2.0),
         "eta": 2.0,
     }
