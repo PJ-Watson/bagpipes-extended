@@ -83,10 +83,11 @@ def load_photom_bagpipes(
     for c in phot_cat.colnames:
         if c.lower().endswith(sci_suffix):
             fluxes.append(phot_cat[c][row_idx])
-        elif c.lower().endswith(var_suffix):
-            errs.append(np.sqrt(phot_cat[c][row_idx]))
-        elif c.lower().endswith(err_suffix):
-            errs.append(phot_cat[c][row_idx])
+            filt_name = c.removesuffix(sci_suffix)
+            try:
+                errs.append(np.sqrt(phot_cat[f"{filt_name}{var_suffix}"][row_idx]))
+            except:
+                errs.append(phot_cat[f"{filt_name}{err_suffix}"][row_idx])
 
     if zeropoint == 28.9:
         flux_scale = 1e-2

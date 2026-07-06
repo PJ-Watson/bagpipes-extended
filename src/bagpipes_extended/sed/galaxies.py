@@ -145,6 +145,11 @@ def mod_get_advanced_quantities(self):
         size = self.model_galaxy.spectrum_full.shape[0]
         self.samples["dust_curve"] = np.zeros((self.n_samples, size))
 
+    if "nebular" in list(self.fitted_model.model_components):
+        blank_arrays = [np.zeros(self.n_samples) for i in range(len(config.line_names))]
+        line_post_dict = dict(zip(config.line_names, blank_arrays))
+        self.samples["line_fluxes"] = line_post_dict
+
     if "calib" in list(self.fitted_model.model_components):
         size = self.model_galaxy.spectrum.shape[0]
         self.samples["calib"] = np.zeros((self.n_samples, size))
@@ -167,13 +172,17 @@ def mod_get_advanced_quantities(self):
             self.samples["chisq_lines"][i] = self.fitted_model.chisq_lines
 
         if "dla" in list(self.fitted_model.model_components):
-            self.samples["dla_transmission"][
-                i
-            ] = self.fitted_model.model_galaxy.dla_trans
+            dla_trans = self.fitted_model.model_galaxy.dla_trans
+            self.samples["dla_transmission"][i] = dla_trans
 
         if "dust" in list(self.fitted_model.model_components):
             dust_curve = self.fitted_model.model_galaxy.dust_atten.A_cont
             self.samples["dust_curve"][i] = dust_curve
+
+        if "nebular" in list(self.fitted_model.model_components):
+            for key in config.line_names:
+                line_flux = self.fitted_model.model_galaxy.line_fluxes[key]
+                self.samples["line_fluxes"][key][i] = line_flux
 
         if "calib" in list(self.fitted_model.model_components):
             self.samples["calib"][i] = self.fitted_model.calib.model
