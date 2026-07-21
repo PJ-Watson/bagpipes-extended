@@ -23,6 +23,10 @@ import h5py
 import numpy as np
 from astropy.table import Table
 from bagpipes.fitting.prior import dirichlet, prior
+
+# try:
+#     from niriss_tools.grism.specgen import ExtendedModelGalaxy as model_galaxy
+# except:
 from bagpipes.models import model_galaxy
 from numpy.random import Generator
 from numpy.typing import ArrayLike

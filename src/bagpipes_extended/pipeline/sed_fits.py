@@ -206,7 +206,7 @@ def load_lines_bagpipes(
     em_lines_errs = np.asarray(em_lines_errs)
     bad_values = (
         ~np.isfinite(em_lines)
-        | (em_lines < min_flux)
+        | np.logical_not(em_lines > min_flux)
         | ~np.isfinite(em_lines_errs)
         | (em_lines_errs <= 0)
     )
@@ -290,6 +290,7 @@ def generate_fit_params(
             continuity = {
                 "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
+                "metallicity_prior": "Gaussian",
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
                 "bin_edges": np.floor(age_bins).tolist(),
@@ -311,6 +312,7 @@ def generate_fit_params(
             continuity = {
                 "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
+                "metallicity_prior": "Gaussian",
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
                 "bin_edges_low": [0, min_age_bin],
@@ -333,6 +335,7 @@ def generate_fit_params(
             fit_params["dblplaw"] = {
                 "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
+                "metallicity_prior": "Gaussian",
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
                 "alpha": (0.1, 1000),
@@ -346,6 +349,7 @@ def generate_fit_params(
             fit_params["delayed"] = {
                 "massformed": (5.0, 11.0),
                 "metallicity": (0.0, 3.0),
+                "metallicity_prior": "Gaussian",
                 "metallicity_prior_mu": 1.0,
                 "metallicity_prior_sigma": 0.5,
                 "age": (0.1, np.floor(age_at_z * 1e3) / 1e3),
