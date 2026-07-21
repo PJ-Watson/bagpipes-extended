@@ -16,9 +16,9 @@ def contvz(self, sfr: ArrayLike, param: dict):
         The parameter dictionary used to update the current SFH.
     """
 
-    bin_edges_low = np.array(param.get("bin_edges_low", [0]))
-    bin_edges_high = np.array(
-        param.get("bin_edges_high", 0)
+    bin_edges_low = np.atleast_1d(np.array(param.get("bin_edges_low", [0])))
+    bin_edges_high = np.atleast_1d(
+        np.array(param.get("bin_edges_high", [0]))
     ) + np.floor(self.age_of_universe) * 10 ** (-6)
     n_bins = param.get("n_bins", 7)
 
@@ -34,7 +34,7 @@ def contvz(self, sfr: ArrayLike, param: dict):
                 bin_edges_high,
             ]
         )[::-1].astype(int)
-        * 1e6
+        * 10**6
     )
 
     dsfrs = [param["dsfr" + str(i)] for i in range(1, n_bins)]

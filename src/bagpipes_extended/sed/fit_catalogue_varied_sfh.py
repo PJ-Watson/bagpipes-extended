@@ -24,12 +24,16 @@ except ImportError:
     rank = 0
     size = 1
 
+import bagpipes
 from bagpipes import utils
 from bagpipes.catalogue import fit_catalogue as bagpipes_fit_catalogue
 from bagpipes.input.galaxy import galaxy
 
+from bagpipes_extended.sed.continuity_varied_z import contvz
 from bagpipes_extended.sed.galaxies import FitObj, ObsGalaxy
 from bagpipes_extended.sed.plotting import mujy_summary_plot
+
+bagpipes.models.star_formation_history.contvz = contvz
 
 
 class fit_catalogue(bagpipes_fit_catalogue):
@@ -326,11 +330,15 @@ class fit_catalogue(bagpipes_fit_catalogue):
                         med_z = self.cat.loc[ID, "input_redshift"]
 
                     age_univ = 10**9 * np.interp(med_z, utils.z_array, utils.age_at_z)
-                    bin_edges_low = np.array(
-                        self.fit_instructions["contvz"].get("bin_edges_low", [0])
+                    bin_edges_low = np.atleast_1d(
+                        np.array(
+                            self.fit_instructions["contvz"].get("bin_edges_low", [0])
+                        )
                     )
-                    bin_edges_high = np.array(
-                        self.fit_instructions["contvz"].get("bin_edges_high", 0)
+                    bin_edges_high = np.atleast_1d(
+                        np.array(
+                            self.fit_instructions["contvz"].get("bin_edges_high", [0])
+                        )
                     ) + age_univ * 10 ** (-6)
                     n_bins = self.fit_instructions["contvz"].get("n_bins", 7)
 
