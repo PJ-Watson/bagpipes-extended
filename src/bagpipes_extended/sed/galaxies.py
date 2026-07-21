@@ -444,24 +444,6 @@ bagpipes_fitted_model._lnlike_line_fluxes = _lnlike_line_fluxes
 class FittedGalaxy(bagpipes_fitted_model):
     """A modified version of `bagpipes.fit.fitted_model`."""
 
-    def _set_constants(self):
-        """Calculate constant factors used in the lnlike function."""
-
-        if self.galaxy.photometry_exists:
-            log_error_factors = np.log(2 * np.pi * self.galaxy.photometry[:, 2] ** 2)
-            self.K_phot = -0.5 * np.sum(log_error_factors)
-            self.inv_sigma_sq_phot = 1.0 / self.galaxy.photometry[:, 2] ** 2
-
-        if self.galaxy.index_list is not None:
-            log_error_factors = np.log(2 * np.pi * self.galaxy.indices[:, 1] ** 2)
-            self.K_ind = -0.5 * np.sum(log_error_factors)
-            self.inv_sigma_sq_ind = 1.0 / self.galaxy.indices[:, 1] ** 2
-
-        if self.galaxy.line_labels is not None:
-            log_error_factors = np.log(2 * np.pi * self.galaxy.line_fluxes[:, 1] ** 2)
-            self.K_lines = -0.5 * np.sum(log_error_factors)
-            self.inv_sigma_sq_lines = 1.0 / self.galaxy.line_fluxes[:, 1] ** 2
-
     def lnlike(self, x: ArrayLike, ndim: int = 0, nparam: int = 0):
         """
         Return the log-likelihood for a given parameter vector.
@@ -510,11 +492,11 @@ class FittedGalaxy(bagpipes_fitted_model):
         if self.galaxy.photometry_exists:
             lnlike += self._lnlike_phot()
 
-        if self.galaxy.index_list is not None:
-            lnlike += self._lnlike_indices()
-
         if self.galaxy.line_labels is not None:
             lnlike += self._lnlike_line_fluxes()
+
+        if self.galaxy.index_list is not None:
+            lnlike += self._lnlike_indices()
 
         # Return zero likelihood if lnlike = nan (something went wrong).
         if np.isnan(lnlike):
