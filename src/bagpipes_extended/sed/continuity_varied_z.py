@@ -17,9 +17,16 @@ def contvz(self, sfr: ArrayLike, param: dict):
     """
 
     bin_edges_low = np.atleast_1d(np.array(param.get("bin_edges_low", [0])))
-    bin_edges_high = np.atleast_1d(
-        np.array(param.get("bin_edges_high", [0]))
-    ) + np.floor(self.age_of_universe) * 10 ** (-6)
+    if param.get("bin_frac_high") is not None:
+        bin_edges_high = (
+            np.atleast_1d(np.array([param.get("bin_frac_high"), 1.0]))
+            * np.floor(self.age_of_universe)
+            * 10 ** (-6)
+        )
+    else:
+        bin_edges_high = np.atleast_1d(
+            np.array(param.get("bin_edges_high", [0]))
+        ) + np.floor(self.age_of_universe) * 10 ** (-6)
     n_bins = param.get("n_bins", 7)
 
     bin_edges = (
