@@ -107,11 +107,6 @@ def mod_calculate_derived_quantities(self):
         self.tquench = tunivs[quench_ind] * 10**-9
 
 
-bagpipes_star_formation_history._calculate_derived_quantities = (
-    mod_calculate_derived_quantities
-)
-
-
 def mod_get_advanced_quantities(self):
     """
     Calculate advanced derived posterior quantities.
@@ -256,6 +251,7 @@ def mod_get_basic_quantities(self):
         param = self.samples2d[self.indices[i], :]
         self.fitted_model._update_model_components(param)
         self.sfh.update(self.fitted_model.model_components)
+        mod_calculate_derived_quantities(self.sfh)
 
         for q in quantity_names:
             self.samples[q][i] = getattr(self.sfh, q)
