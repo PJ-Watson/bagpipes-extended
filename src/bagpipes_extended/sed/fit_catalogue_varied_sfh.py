@@ -397,7 +397,15 @@ class fit_catalogue(bagpipes_fit_catalogue):
         ]
 
         if self.full_catalogue:
-            self.vars += ["UV_colour", "VJ_colour", "tform10", "tform50", "tform90"]
+            self.vars += [
+                "UV_colour",
+                "VJ_colour",
+                "tform10",
+                "tform50",
+                "tform90",
+                "sfr10",
+                "sfr100",
+            ]
 
     def _setup_catalogue(self):
         """Set up the initial blank output catalogue."""

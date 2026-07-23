@@ -433,7 +433,7 @@ def mujy_summary_plot(
         np.log10(0.9 * np.nanmin(post[:, 1][np.argwhere(x < age_of_universe)[:-10]])),
         np.log10(np.max([ax_sfh.get_ylim()[1], 1.25 * np.max(post[:, 2])])),
     )
-    ax_sfh.set_xlim(1e-2, age_of_universe)
+    ax_sfh.set_xlim(1e-3, 1.05 * age_of_universe)
 
     ax_sfh.semilogx()
     ax_sfh.get_xaxis().set_major_formatter(

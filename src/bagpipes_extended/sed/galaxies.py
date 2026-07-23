@@ -55,6 +55,16 @@ def mod_calculate_derived_quantities(self):
     self.mass_weighted_age = np.sum(self.sfh * self.age_widths * self.ages)
     self.mass_weighted_age /= np.sum(self.sfh * self.age_widths)
 
+    # Explicitly calculate SFR_10 and SFR_100 (in case the latter is changed in
+    # config.py)
+    age_mask_10 = self.ages < 10**7
+    self.sfr10 = np.sum(self.sfh[age_mask_10] * self.age_widths[age_mask_10])
+    self.sfr10 /= self.age_widths[age_mask_10].sum()
+
+    age_mask_100 = self.ages < 10**8
+    self.sfr100 = np.sum(self.sfh[age_mask_100] * self.age_widths[age_mask_100])
+    self.sfr100 /= self.age_widths[age_mask_100].sum()
+
     # Calculate nth percentile formation time
     perc = 90
     cum_sfh = np.cumsum(self.sfh * self.age_widths) / np.sum(self.sfh * self.age_widths)
@@ -222,6 +232,8 @@ def mod_get_basic_quantities(self):
         "stellar_mass",
         "formed_mass",
         "sfr",
+        "sfr10",
+        "sfr100",
         "ssfr",
         "nsfr",
         "mass_weighted_age",
