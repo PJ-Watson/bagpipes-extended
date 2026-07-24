@@ -15,7 +15,7 @@ aanda_columnwidth = 256.0748 / 72.27
 aanda_textwidth = 523.5307 / 72.27
 
 
-def setup_aanda_style(dark: bool = False):
+def setup_aanda_style(dark: bool = False, usetex: bool | None = None):
     """
     A helper function to setup the A&A style.
 
@@ -23,13 +23,15 @@ def setup_aanda_style(dark: bool = False):
     ----------
     dark : bool, optional
         Use a dark plotting style, by default `False`.
+    usetex : bool | None, optional
+        Use LaTeX to display the fonts on the figure. By default (`None`),
+        this follows the existing matplotlib rcParams.
     """
 
     rc_fonts = {
         "font.family": "serif",
         "font.size": 7,
         "figure.figsize": (aanda_columnwidth, 3),
-        "text.usetex": True,
         "ytick.right": True,
         "ytick.direction": "in",
         "ytick.minor.visible": True,
@@ -43,25 +45,37 @@ def setup_aanda_style(dark: bool = False):
         "legend.fontsize": 7,
         "lines.linewidth": 1,
         "image.interpolation": "none",
-        "text.latex.preamble": (
-            r"""
-        \usepackage{amsmath}
-        \usepackage{txfonts}
-        \usepackage{siunitx}
-        %
-        \DeclareMathAlphabet{\mathsc}{OT1}{cmr}{m}{sc}
-        \def\testbx{bx}%
-        \DeclareRobustCommand{\ion}[2]{%
-        \relax\ifmmode
-        \ifx\testbx\f@series
-        {\mathbf{#1\,\mathsc{#2}}}\else
-        {\mathrm{#1\,\mathsc{#2}}}\fi
-        \else\textup{#1\,{\mdseries\textsc{#2}}}%
-        \fi}
-        %
-        """
-        ),
     }
+
+    if usetex is None:
+        usetex = mpl.rcParams.get("usetex")
+
+    if usetex:
+        rc_fonts |= {
+            "text.usetex": True,
+            "text.latex.preamble": (
+                r"""
+            \usepackage{amsmath}
+            \usepackage{txfonts}
+            \usepackage{siunitx}
+            %
+            \DeclareMathAlphabet{\mathsc}{OT1}{cmr}{m}{sc}
+            \def\testbx{bx}%
+            \DeclareRobustCommand{\ion}[2]{%
+            \relax\ifmmode
+            \ifx\testbx\f@series
+            {\mathbf{#1\,\mathsc{#2}}}\else
+            {\mathrm{#1\,\mathsc{#2}}}\fi
+            \else\textup{#1\,{\mdseries\textsc{#2}}}%
+            \fi}
+            %
+            """
+            ),
+        }
+    else:
+        rc_fonts |= {
+            "text.usetex": False,
+        }
 
     if dark:
         rc_fonts |= {
@@ -158,6 +172,7 @@ def mujy_summary_plot(
     background_spectrum: bool = True,
     save: bool = True,
     show: bool = False,
+    usetex: bool | None = None,
 ) -> None:
     """
     Create a summary plot for bagpipes fits.
@@ -191,9 +206,12 @@ def mujy_summary_plot(
         Save the figure to the `pipes/plots` directory, by default `True`.
     show : bool, optional
         Show the figure, by default `False`.
+    usetex : bool | None, optional
+        Use LaTeX to display the fonts on the figure. By default, this
+        follows the existing matplotlib rcParams.
     """
 
-    setup_aanda_style()
+    setup_aanda_style(usetex=usetex)
 
     fig = plt.figure(figsize=(aanda_textwidth, 6), constrained_layout=True)
 
