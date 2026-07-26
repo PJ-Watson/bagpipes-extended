@@ -196,26 +196,33 @@ def load_lines_bagpipes(
     if not isinstance(line_cat, Table):
         line_cat = Table.read(line_cat, hdu=cat_hdu_index)
 
-    row_idx = (line_cat[id_colname] == int(str_id)).nonzero()[0][0]
-    em_lines = []
-    em_lines_errs = []
-    for l, n in line_mapping.items():
-        em_lines.append(line_cat[f"{flux_prefix}{l}{flux_suffix}"][row_idx])
-        em_lines_errs.append(line_cat[f"{err_prefix}{l}{err_suffix}"][row_idx])
-    em_lines = np.asarray(em_lines)
-    em_lines_errs = np.asarray(em_lines_errs)
-    bad_values = (
-        ~np.isfinite(em_lines)
-        | np.logical_not(em_lines > min_flux)
-        | ~np.isfinite(em_lines_errs)
-        | (em_lines_errs <= 0)
-    )
-    em_lines[bad_values] = 0.0
-    em_lines_errs[bad_values] = 1e30
+    try:
+        row_idx = (line_cat[id_colname] == int(str_id)).nonzero()[0][0]
+        em_lines = []
+        em_lines_errs = []
+        for l, n in line_mapping.items():
+            em_lines.append(line_cat[f"{flux_prefix}{l}{flux_suffix}"][row_idx])
+            em_lines_errs.append(line_cat[f"{err_prefix}{l}{err_suffix}"][row_idx])
+        em_lines = np.asarray(em_lines)
+        em_lines_errs = np.asarray(em_lines_errs)
+        bad_values = (
+            ~np.isfinite(em_lines)
+            | np.logical_not(em_lines > min_flux)
+            | ~np.isfinite(em_lines_errs)
+            | (em_lines_errs <= 0)
+        )
+        em_lines[bad_values] = 0.0
+        em_lines_errs[bad_values] = 1e30
 
-    # return np.c_[list(line_mapping.values()), em_lines, em_lines_errs]
-    # return list(map(list, zip(*[list(line_mapping.values()), em_lines, em_lines_errs])))
-    return list(line_mapping.values()), np.c_[em_lines, em_lines_errs]
+        return list(line_mapping.values()), np.c_[em_lines, em_lines_errs]
+    except:
+        return (
+            list(line_mapping.values()),
+            np.c_[
+                np.zeros(len(list(line_mapping.values()))),
+                np.full(len(list(line_mapping.values())), 1e30),
+            ],
+        )
 
 
 def generate_fit_params(
