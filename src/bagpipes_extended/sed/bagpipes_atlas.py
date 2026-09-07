@@ -32,7 +32,7 @@ from numpy.random import Generator
 from numpy.typing import ArrayLike
 from tqdm import tqdm
 
-from bagpipes_extended.c_utils import calc_chisq
+from bagpipes_extended.c_utils import calc_chisq, calc_scaling
 
 __all__ = ["AtlasGenerator", "AtlasFitter"]
 
@@ -383,10 +383,7 @@ class AtlasGenerator:
         store_fn,
         tqdm_list,
     ):
-        # return
-        # print(shared_init[indices].shape)
-        # param_cube = np.zeros_like(cubes)
-        # print (indices)
+
         pgb_pos = self._get_pgb_pos(tqdm_list)
 
         worker_id = indices[0]
@@ -398,7 +395,6 @@ class AtlasGenerator:
         shm_output = shared_memory.SharedMemory(name=shared_output)
         output_arr = np.ndarray(output_shape, dtype=float, buffer=shm_output.buf)
 
-        # for i, c in tqdm(enumerate(cubes), total=n_samples):
         try:
             for i, idx_i in tqdm(
                 enumerate(indices),
@@ -408,22 +404,19 @@ class AtlasGenerator:
                 leave=False,
                 mininterval=1,
             ):
-                # print(c)
+
                 param_vector = self.prior.transform(init_arr[idx_i])
                 init_arr[idx_i] = param_vector
-                # print (param_vector)
+
                 if i == 0:
                     model_obj = self.sample_from_params(param_vector)
                 else:
                     model_obj = self.sample_from_params(
                         param_vector, model_gal=model_obj
                     )
-                # print (store_fn)
+
                 output_arr[idx_i] = store_fn(model_obj)
-                # print (model_obj.photometry)
-                # print (shared_output[idx_i])
-            # print (output_arr)
-            # print (self.model_atlas[i])
+
         finally:
             self._release_pgb_pos
 
@@ -479,29 +472,26 @@ class AtlasGenerator:
 
         rng = np.random.default_rng(seed=seed)
 
-        # if rank == 0:
-        # print (n_samples, self.ndim)
         if parallel == 0:
             cubes = rng.random((n_samples, self.ndim))
 
             self.model_atlas = np.ndarray((n_samples, n_output), dtype=float)
             model_obj = None
-            # print (self.model_atlas.shape)
 
             for i, c in tqdm(enumerate(cubes), total=n_samples):
-                # print(c)
+
                 param_vector = self.prior.transform(c)
                 cubes[i] = param_vector
-                # print (param_vector)
+
                 if i == 0:
                     model_obj = self.sample_from_params(param_vector)
                 else:
                     model_obj = self.sample_from_params(
                         param_vector, model_gal=model_obj
                     )
-                # print (len(store_fn(model_obj)))
+
                 self.model_atlas[i] = store_fn(model_obj)
-                # print (self.model_atlas[i])
+
             self.param_vectors = cubes.copy()
 
         else:
@@ -524,27 +514,22 @@ class AtlasGenerator:
 
             with SharedMemoryManager() as smm:
                 cubes = rng.random((n_samples, self.ndim))
-                # print (cubes.shape)
+
                 shm_in = smm.SharedMemory(size=cubes.nbytes)
                 shared_init_params = np.ndarray(
                     cubes.shape, dtype=cubes.dtype, buffer=shm_in.buf
                 )
                 shared_init_params[:] = cubes[:]
-                # print (shared_init_params.shape)
 
-                # if chunk_size is None:
-                #     chunk_size = n_samples // parallel
                 _indices = np.arange(n_samples)
                 array_indices = np.array_split(_indices, self.n_proc)
 
-                # cubes = rng.random((n_samples, self.ndim))
                 shm_out = smm.SharedMemory(
                     size=(np.dtype(float).itemsize * n_samples * n_output)
                 )
                 shared_model_atlas = np.ndarray(
                     (n_samples, n_output), dtype=float, buffer=shm_out.buf
                 )
-                # shared_model_atlas[:] = cubes[:]
 
                 with Pool(
                     processes=self.n_proc, initializer=tqdm.set_lock, initargs=(lock,)
@@ -575,10 +560,6 @@ class AtlasGenerator:
             The path to which the grid will be written.
         """
 
-        # print(self.fit_instructions)
-        # print(self.model_components)
-        # print(self.params)
-
         if self.param_vectors is not None and self.model_atlas is not None:
 
             with h5py.File(filepath, "w") as file:
@@ -593,15 +574,6 @@ class AtlasGenerator:
                     file.create_dataset(k, data=self.param_vectors[:, i])
 
                 file.create_dataset("model_atlas", data=self.model_atlas)
-
-            #     # self.results["fit_instructions"] = self.fit_instructions
-
-            # file.close()
-
-
-# def _test_shared_memory(indices, shared_init, shared_output):
-#     # return
-#     print(shared_init[indices].shape)
 
 
 # @staticmethod
@@ -671,59 +643,51 @@ def fit_single(
         param_samples_shape, dtype=float, buffer=shm_param_samples.buf
     )
 
-    # diff = (self.model_atlas - galaxy.photometry[:, 1]) ** 2
-
-    # chisq_arr = np.nansum(
-    #     (self.model_atlas - galaxy.photometry[:, 1]) ** 2 * inv_sigma_sq_phot,
-    #     axis=-1,
-    # )  # /(diff.shape[1]-len(self.params))
     if z_range is None:
-        chisq_arr = calc_chisq(
+        scaling = calc_scaling(
             shared_model_atlas,
             np.ascontiguousarray(galaxy.photometry[:, 1]),
             inv_sigma_sq_phot,
         )
-        param2d = shared_param_samples  # [self.param_samples[k] for k in self.params]
+        chisq_arr = calc_chisq(
+            shared_model_atlas,
+            np.ascontiguousarray(galaxy.photometry[:, 1]),
+            inv_sigma_sq_phot,
+            scaling,
+        )
+        param2d = shared_param_samples
     else:
-        # z_idxs = slice(np.argmin(),np.argmax(self.param_samples["redshift"]<=ID))
-        # print (params)
-        # print (np.asarray(params)=="redshift", shared_param_samples.shape)
-        # print (shared_param_samples[np.asarray(params)=="redshift"])
         z_idxs = np.searchsorted(
             shared_param_samples[np.asarray(params) == "redshift"].ravel(), z_range
         )
         if z_idxs[0] == shared_param_samples.shape[1] or z_idxs[1] == 0:
             raise ValueError("Redshift range not covered by model atlas.")
-        chisq_arr = calc_chisq(
+
+        scaling = calc_scaling(
             shared_model_atlas[z_idxs[0] : z_idxs[1]],
             np.ascontiguousarray(galaxy.photometry[:, 1]),
             inv_sigma_sq_phot,
         )
-        # param2d = [
-        #     self.param_samples[k][z_idxs[0] : z_idxs[-1]] for k in self.params
-        # ]
+        chisq_arr = calc_chisq(
+            shared_model_atlas[z_idxs[0] : z_idxs[1]],
+            np.ascontiguousarray(galaxy.photometry[:, 1]),
+            inv_sigma_sq_phot,
+            scaling,
+        )
+
         param2d = shared_param_samples[:, z_idxs[0] : z_idxs[-1]]
     map_idx = np.argmin(chisq_arr)
     lnlike_oned = K_phot - 0.5 * chisq_arr
 
-    # param2d.append(lnlike_oned)
-    # print ("1", param2d.shape)
     param2d = np.concatenate([param2d, np.atleast_2d(lnlike_oned)]).T
-    # param2d = np.column_stack([param2d, lnlike_oned])
-    # print ("2", param2d.shape)
 
-    # chisq_arr /= self.ndim
+    for i, p in enumerate(params):
+        if "massformed" in p:
+            # Log of the scaling factor since massformed is already log10
+            param2d[:, i] += np.log10(scaling)
 
     weights = np.exp(-0.5 * chisq_arr) / np.nansum(np.exp(-0.5 * chisq_arr))
     finite_weights = np.isfinite(weights)
-
-    # import matplotlib.pyplot as plt
-    # print (self.params)
-    # # plt.scatter(self.param_samples["continuity:massformed"], chisq_arr/self.ndim)
-    # # plt.ylim((0,1e3))
-    # plt.scatter(self.param_samples["continuity:massformed"], weights)
-    # plt.show()
-    # exit()
 
     if np.nansum(finite_weights) == 0:
         samples2d = np.zeros((n_posterior, param2d.shape[1]))
