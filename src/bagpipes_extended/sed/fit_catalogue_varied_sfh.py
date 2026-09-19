@@ -35,6 +35,8 @@ from bagpipes_extended.sed.plotting import mujy_summary_plot
 
 bagpipes.models.star_formation_history.contvz = contvz
 
+__all__ = ["fit_catalogue"]
+
 
 class fit_catalogue(bagpipes_fit_catalogue):
     """

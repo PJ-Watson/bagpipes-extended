@@ -31,6 +31,8 @@ except:
 from numpy.typing import ArrayLike
 from tqdm import tqdm
 
+__all__ = ["ExtendedSFH", "ExtendedModelGalaxy", "air_to_vac", "BagpipesSpecGenerator"]
+
 
 class ExtendedSFH(BagpipesSFH):
     """

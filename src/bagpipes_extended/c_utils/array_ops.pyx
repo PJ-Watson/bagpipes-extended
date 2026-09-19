@@ -85,7 +85,7 @@ def calc_scaling(
 
     Returns
     -------
-        scaling : 1D `~np.ndarray`
+    scaling : 1D `~np.ndarray`
         The scaling factor to match the models to observations, of shape
         (N,).
     """

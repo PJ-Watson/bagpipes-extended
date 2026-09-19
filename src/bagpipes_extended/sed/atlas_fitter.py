@@ -31,7 +31,7 @@ from tqdm import tqdm
 from bagpipes_extended.c_utils import calc_chisq, calc_scaling
 from bagpipes_extended.sed.specgen import BagpipesSpecGenerator
 
-__all__ = ["AtlasGenerator", "AtlasFitter"]
+__all__ = ["AtlasFitter"]
 
 
 default_min_errs = {

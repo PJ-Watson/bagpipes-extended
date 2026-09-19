@@ -14,6 +14,14 @@ from scipy.ndimage import gaussian_filter
 aanda_columnwidth = 256.0748 / 72.27
 aanda_textwidth = 523.5307 / 72.27
 
+__all__ = [
+    "setup_aanda_style",
+    "modLogFormatter",
+    "mscatter",
+    "mujy_summary_plot",
+    "_hist1d",
+]
+
 
 def setup_aanda_style(dark: bool = False, usetex: bool | None = None):
     """
