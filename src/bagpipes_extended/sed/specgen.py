@@ -643,7 +643,7 @@ class BagpipesSpecGenerator(object):
         Angstroms), by default ``np.arange(1e4, 2.3e4, 22.5)``.
     **model_kwargs : dict, optional
         Any additional keyword arguments to pass to
-        `~niriss_tools.grism.specgen.ExtendedModelGalaxy`.
+        `~bagpipes_extended.sed.specgen.ExtendedModelGalaxy`.
     """
 
     def __init__(
