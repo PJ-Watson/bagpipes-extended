@@ -61,6 +61,7 @@ def calc_chisq(
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
+@cython.cdivision(True)
 def calc_scaling(
     DTYPE_t[:,::1] models,
     DTYPE_t[::1] obs,
@@ -92,17 +93,23 @@ def calc_scaling(
     I = models.shape[0]
     J = models.shape[1]
 
-    cdef DTYPE_t[::1] num = np.zeros(I, dtype=DTYPE)
-    cdef DTYPE_t[::1] denom = np.zeros(I, dtype=DTYPE)
+    cdef DTYPE_t current_num, current_denom, m_val, obs_weighted
 
-    cdef DTYPE_t[::1] scaling = np.zeros(I, dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] scaling = np.empty(I, dtype=DTYPE)
+    cdef DTYPE_t[:] scaling_view = scaling
 
     for i in range(I):
+        current_num = 0.0
+        current_denom = 0.0
+
         for j in range(J):
-            num[i] += models[i,j] * (obs[j] * inv_sig_sq[j])
-            denom[i] += models[i,j] ** 2.0 * inv_sig_sq[j]
 
-    for i in range(I):
-        scaling[i] = num[i] / denom[i]
+            m_val = models[i, j]
+            obs_weighted = obs[j] * inv_sig_sq[j]
+
+            current_num += m_val * obs_weighted
+            current_denom += (m_val * m_val) * inv_sig_sq[j]
+
+        scaling_view[i] = current_num / current_denom
 
     return scaling
