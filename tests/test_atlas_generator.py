@@ -1,7 +1,8 @@
 """
-Unit tests for the AtlasGenerator module layout using pytest.
+Unit tests for the AtlasGenerator module using pytest.
 """
 
+import multiprocessing as mp
 import os
 import tempfile
 import time
@@ -11,6 +12,8 @@ from unittest.mock import MagicMock, patch
 import h5py
 import numpy as np
 import pytest
+
+mp.set_start_method("fork")
 
 from bagpipes_extended.sed.atlas_generator import (
     AtlasGenerator,
@@ -264,7 +267,7 @@ class TestAtlasGenerator:
         print(f" -> Mean execution time: {total_tracked_time:.4f} seconds")
         print(f" -> Grid scaling throughput: {throughput:.2f} samples/sec")
 
-        assert self.gen.model_atlas.shape == (1000, 3)
+        assert self.gen.model_atlas.shape == (n_samples, 3)
 
 
 def test_worker_process_components_execution(
