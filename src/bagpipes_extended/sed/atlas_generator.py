@@ -489,11 +489,13 @@ class AtlasGenerator:
             n_output = len(self._model_kwargs["filt_list"]) + 1
         elif self._model_kwargs["spec_wavs"] is not None:
             raise NotImplementedError(
+                "Spectroscopic sampling is currently unsupported."
                 "This is more complicated than photometry (see `noise' and `calib' "
                 "keys), and may be implemented at a later stage."
             )
         elif self._model_kwargs["index_list"] is not None:
             raise NotImplementedError(
+                "Line index sampling is currently unsupported."
                 "This seems to be a rarely used part of bagpipes, and is unlikely "
                 "to be implemented."
             )
@@ -502,6 +504,8 @@ class AtlasGenerator:
 
         if parallel < 0:
             self.n_proc = cpu_count()
+        elif parallel == 0:
+            self.n_proc = 1
         else:
             self.n_proc = parallel
 
