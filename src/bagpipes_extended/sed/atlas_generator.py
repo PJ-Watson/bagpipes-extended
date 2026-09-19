@@ -1,5 +1,5 @@
 """
-A module for fitting objects using a grid search sampling of bagpipes.
+A module for generating a grid of bagpipes model outputs.
 
 Parts of the documentation here are copied from
 `ACCarnall/bagpipes <https://github.com/ACCarnall/bagpipes>`__, for
