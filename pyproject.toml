@@ -29,16 +29,6 @@ dependencies = [
     "bagpipes>=1.2.0"
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pre-commit>=3.8"
-]
-docs = [
-    "sphinx-copybutton>=0.5",
-    "sphinx>=8.0",
-    "numpydoc>=1.8",
-]
-
 [project.urls]
 "Homepage" = "https://github.com/PJ-Watson/bagpipes-extended"
 "Bug Tracker" = "https://github.com/PJ-Watson/bagpipes-extended/issues"
@@ -76,3 +66,15 @@ override_SS05 = [  # override SS05 to allow docstrings starting with these words
 
 [tool.setuptools_scm]
 version_file = "src/bagpipes_extended/_version.py"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5"
+]
+docs = [
+    "sphinx-copybutton>=0.5",
+    "sphinx<9.0",
+    "numpydoc>=1.10",
+    "sphinx-astropy>=1.10",
+    "pydata-sphinx-theme>=0.16.1"
+]
