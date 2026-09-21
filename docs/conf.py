@@ -12,7 +12,7 @@ Configuration file for the Sphinx documentation builder.
 from sphinx_astropy.conf.v2 import *
 
 project = "bagpipes-extended"
-copyright = "2025, Peter J. Watson"
+copyright = "2026, Peter J. Watson"
 author = "Peter J. Watson"
 
 import sys
@@ -51,7 +51,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # html_theme = 'furo'
 # html_theme = 'sphinx_rtd'
 html_theme = "pydata_sphinx_theme"
-html_static_path = ["_static"]
+html_static_path = []
 
 # Don't show typehints in description or signature
 autodoc_typehints = "none"
@@ -67,19 +67,8 @@ numpydoc_show_class_members = False
 numpydoc_show_inherited_class_members = False
 
 version_link = f"{sys.version_info.major}.{sys.version_info.minor}"
-# intersphinx_mapping += {
-#     "python": (
-#         f"https://docs.python.org/{version_link}",
-#         None,
-#     ),  # link to used Python version
-#     "numpy": ("https://numpy.org/doc/stable", None),
-#     "scipy": ("https://docs.scipy.org/doc/scipy", None),
-#     "matplotlib": ("https://matplotlib.org/stable", None),
-#     "astropy": ("https://docs.astropy.org/en/stable", None),
 intersphinx_mapping |= {
     "bagpipes": ("https://bagpipes.readthedocs.io/en/latest", None),
-    "pypher": ("https://pypher.readthedocs.io/en/latest/", None),
-    "stwcs": ("https://stwcs.readthedocs.io/en/latest/", None),
 }
 
 # Any `...` defaults to a link
