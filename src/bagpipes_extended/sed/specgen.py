@@ -618,14 +618,16 @@ def air_to_vac(wavelength: ArrayLike) -> ArrayLike:
         The wavelengths in Angstroms.
     """
 
-    sigma2 = (1 / (wavelength / 1e4)) ** 2
+    wav = np.array(wavelength, copy=True)
+
+    sigma2 = (1 / (wav / 1e4)) ** 2
 
     refr = 1 + 1e-6 * (287.6155 + 1.62887 * sigma2 + 0.01360 * sigma2**2)
 
     # Only convert above 2000A
-    wavelength[wavelength > 2e3] *= refr[wavelength > 2e3]
+    wav[wav > 2e3] *= refr[wav > 2e3]
 
-    return wavelength
+    return wav
 
 
 class BagpipesSpecGenerator(object):

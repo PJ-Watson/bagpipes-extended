@@ -364,12 +364,13 @@ class AtlasGenerator:
                 "Try reducing the number of samples."
             )
 
-        cubes = self.rng.random((n_samples, self.ndim), dtype=float)
-        self.shm_init_params = self.smm.SharedMemory(size=cubes.nbytes)
-        self.param_vectors = np.ndarray(
-            cubes.shape, dtype=float, buffer=self.shm_init_params.buf
+        self.shm_init_params = self.smm.SharedMemory(
+            size=n_samples * self.ndim * np.dtype(float).itemsize
         )
-        self.param_vectors[:] = cubes[:]
+        self.param_vectors = np.ndarray(
+            (n_samples, self.ndim), dtype=float, buffer=self.shm_init_params.buf
+        )
+        self.param_vectors[:] = self.rng.random((n_samples, self.ndim), dtype=float)
 
         self.shm_model_atlas = self.smm.SharedMemory(
             size=(np.dtype(float).itemsize * n_samples * n_output)
@@ -519,10 +520,10 @@ class AtlasGenerator:
 
         self.initialise_process_pool(self.n_proc)
 
-        # self.process_pool.map(worker_process_components, tqdm(np.arange(n_samples)))
+        chunksize = max(1, n_samples // (self.n_proc * 40))
         for _ in tqdm(
             self.process_pool.imap_unordered(
-                worker_process_components, np.arange(n_samples)
+                worker_process_components, np.arange(n_samples), chunksize=chunksize
             ),
             total=n_samples,
             mininterval=0.1,

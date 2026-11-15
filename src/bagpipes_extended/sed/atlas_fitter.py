@@ -181,6 +181,7 @@ def fit_single(
         )
 
         param2d = shared_param_samples[:, z_idxs[0] : z_idxs[1]]
+
     map_idx = np.argmin(chisq_arr)
     lnlike_oned = K_phot - 0.5 * chisq_arr
 
@@ -191,17 +192,22 @@ def fit_single(
             # Log of the scaling factor since massformed is already log10
             param2d[:, i] += np.log10(scaling)
 
-    weights = np.exp(-0.5 * chisq_arr) / np.nansum(np.exp(-0.5 * chisq_arr))
-    finite_weights = np.isfinite(weights)
+    chisq_min = chisq_arr[map_idx]  # np.nanmin(chisq_arr)
+    shift_chisq = chisq_arr - chisq_min
+    unnorm_weights = np.exp(-0.5 * shift_chisq)
+    weight_sum = np.nansum(unnorm_weights)
 
-    if np.nansum(finite_weights) == 0:
-        samples2d = np.zeros((n_posterior, param2d.shape[1]))
+    if weight_sum > 0:
+        weights = unnorm_weights / weight_sum
+        finite_mask = np.isfinite(weights) & (weights > 0)
+        sum_finite = np.sum(weights[finite_mask])
+        if sum_finite > 0:
+            p = weights[finite_mask] / sum_finite
+            samples2d = rng.choice(param2d[finite_mask], n_posterior, p=p)
+        else:
+            samples2d = np.zeros((n_posterior, param2d.shape[1]))
     else:
-        samples2d = rng.choice(
-            param2d[finite_weights],
-            n_posterior,
-            p=weights[finite_weights],
-        )
+        samples2d = np.zeros((n_posterior, param2d.shape[1]))
 
     results = {}
 
