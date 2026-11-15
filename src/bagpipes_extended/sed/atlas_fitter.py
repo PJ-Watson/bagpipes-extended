@@ -28,7 +28,7 @@ from bagpipes.fitting.prior import dirichlet, prior
 from numpy.typing import ArrayLike
 from tqdm import tqdm
 
-from bagpipes_extended.c_utils import calc_chisq, calc_scaling
+from bagpipes_extended.c_utils import calc_scaling_and_chisq
 from bagpipes_extended.sed.specgen import BagpipesSpecGenerator
 
 __all__ = ["AtlasFitter"]
@@ -149,16 +149,10 @@ def fit_single(
         inv_sigma_sq_ind = 1.0 / galaxy.indices[:, 1] ** 2
 
     if z_range is None:
-        scaling = calc_scaling(
+        scaling, chisq_arr = calc_scaling_and_chisq(
             shared_model_atlas,
             np.ascontiguousarray(galaxy.photometry[:, 1]),
             inv_sigma_sq_phot,
-        )
-        chisq_arr = calc_chisq(
-            shared_model_atlas,
-            np.ascontiguousarray(galaxy.photometry[:, 1]),
-            inv_sigma_sq_phot,
-            scaling,
         )
         param2d = shared_param_samples
     else:
@@ -168,16 +162,10 @@ def fit_single(
         if z_idxs[0] == shared_param_samples.shape[1] or z_idxs[1] == 0:
             raise ValueError("Redshift range not covered by model atlas.")
 
-        scaling = calc_scaling(
+        scaling, chisq_arr = calc_scaling(
             shared_model_atlas[z_idxs[0] : z_idxs[1]],
             np.ascontiguousarray(galaxy.photometry[:, 1]),
             inv_sigma_sq_phot,
-        )
-        chisq_arr = calc_chisq(
-            shared_model_atlas[z_idxs[0] : z_idxs[1]],
-            np.ascontiguousarray(galaxy.photometry[:, 1]),
-            inv_sigma_sq_phot,
-            scaling,
         )
 
         param2d = shared_param_samples[:, z_idxs[0] : z_idxs[1]]
